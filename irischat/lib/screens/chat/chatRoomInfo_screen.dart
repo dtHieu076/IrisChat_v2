@@ -12,22 +12,23 @@ class ChatRoomInfoScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final displayName = room.isGroup
         ? room.roomName
-        : privateFriend?.displayName ?? 'Người dùng';
+        : privateFriend?.displayName ?? 'My Friend';
 
     final subtitle = room.isGroup
-        ? '${room.participants.length} thành viên'
+        ? '${room.participants.length} Members'
         : (privateFriend?.isOnline ?? false)
-        ? 'Đang hoạt động'
-        : 'Ngoại tuyến';
+        ? 'Online'
+        : 'Offline';
 
     final avatarLetter = displayName.isNotEmpty
         ? displayName[0].toUpperCase()
         : 'U';
+
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
         title: const Text(
-          'Thông tin cuộc trò chuyện',
+          'Conversation Info',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
@@ -37,9 +38,7 @@ class ChatRoomInfoScreen extends StatelessWidget {
           children: [
             const SizedBox(height: 24),
 
-            // =====================================================
             // AVATAR
-            // =====================================================
             CircleAvatar(
               radius: 50,
               backgroundColor: Colors.blue.shade100,
@@ -55,9 +54,7 @@ class ChatRoomInfoScreen extends StatelessWidget {
 
             const SizedBox(height: 16),
 
-            // =====================================================
             // NAME
-            // =====================================================
             Text(
               displayName,
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
@@ -65,6 +62,7 @@ class ChatRoomInfoScreen extends StatelessWidget {
 
             const SizedBox(height: 6),
 
+            // SUBTITLE
             if (!room.isGroup) ...[
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -83,9 +81,7 @@ class ChatRoomInfoScreen extends StatelessWidget {
                   const SizedBox(width: 6),
 
                   Text(
-                    (privateFriend?.isOnline ?? false)
-                        ? 'Đang hoạt động'
-                        : 'Ngoại tuyến',
+                    subtitle,
                     style: const TextStyle(color: Colors.grey, fontSize: 14),
                   ),
                 ],
@@ -99,9 +95,7 @@ class ChatRoomInfoScreen extends StatelessWidget {
 
             const SizedBox(height: 28),
 
-            // =====================================================
             // ACTIONS
-            // =====================================================
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Row(
@@ -110,31 +104,31 @@ class ChatRoomInfoScreen extends StatelessWidget {
                   if (room.isGroup) ...[
                     _buildActionButton(
                       icon: Icons.person_add_alt_1,
-                      label: 'Thêm\nthành viên',
+                      label: 'Add\nMembers',
                       onTap: () {},
                     ),
                   ] else ...[
                     _buildActionButton(
                       icon: Icons.call,
-                      label: 'Trang\n cá nhân',
+                      label: 'Profile',
                       onTap: () {},
                     ),
                   ],
                   _buildActionButton(
                     icon: Icons.search,
-                    label: 'Tìm\n tin nhắn',
+                    label: 'Search\nMessages',
                     onTap: () {},
                   ),
 
                   _buildActionButton(
                     icon: Icons.photo,
-                    label: 'Ảnh &\nvideo',
+                    label: 'Images &\nVideos',
                     onTap: () {},
                   ),
 
                   _buildActionButton(
                     icon: Icons.notifications,
-                    label: 'Thông báo',
+                    label: 'Notifications',
                     onTap: () {},
                   ),
                 ],
@@ -143,38 +137,36 @@ class ChatRoomInfoScreen extends StatelessWidget {
 
             const SizedBox(height: 32),
 
-            // =====================================================
             // SETTINGS
-            // =====================================================
             _buildSectionTile(
               icon: Icons.edit,
-              title: 'Đổi tên cuộc trò chuyện',
+              title: 'Change Conversation Name',
               onTap: () {},
             ),
 
             _buildSectionTile(
               icon: Icons.wallpaper,
-              title: 'Đổi hình nền',
+              title: 'Change Background',
               onTap: () {},
             ),
 
             if (room.isGroup) ...[
               _buildSectionTile(
                 icon: Icons.group,
-                title: 'Xem thành viên',
+                title: 'View Members',
                 onTap: () {},
               ),
             ] else ...[
               _buildSectionTile(
                 icon: Icons.group_add,
-                title: 'Thêm vào nhóm',
+                title: 'Add to Group',
                 onTap: () {},
               ),
             ],
 
             _buildSectionTile(
               icon: Icons.block,
-              title: 'Chặn tin nhắn',
+              title: 'Block Messages',
               textColor: Colors.red,
               onTap: () {},
             ),
@@ -182,14 +174,14 @@ class ChatRoomInfoScreen extends StatelessWidget {
             if (room.isGroup) ...[
               _buildSectionTile(
                 icon: Icons.logout,
-                title: 'Rời nhóm',
+                title: 'Leave Group',
                 textColor: Colors.red,
                 onTap: () {},
               ),
             ] else ...[
               _buildSectionTile(
                 icon: Icons.delete,
-                title: 'Hủy kết bạn',
+                title: 'Unfriend',
                 textColor: Colors.red,
                 onTap: () {},
               ),
