@@ -1,16 +1,27 @@
+import 'dart:typed_data';
+
 import 'package:firebase_database/firebase_database.dart';
+import 'package:irischat/services/CloudinaryService.dart';
 import '../models/chat_room_model.dart';
 import '../models/message_model.dart';
 
 class ChatService {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
+  final CloudinaryService _cloudinaryService = CloudinaryService();
 
-  // Hàm tạo Room ID duy nhất từ 2 UID (Sắp xếp theo thứ tự bảng chữ cái để luôn nhất quán)
+  // ===========================================================================
+  // TẠO MESSAGE ID (Dùng chính _db của Service)
+  // ===========================================================================
+  String generateMessageId(String roomId) {
+    return _db.child('chats').child(roomId).push().key ?? '';
+  }
+
+  // Hàm tạo Room ID duy nhất từ 2 UID
   String getRoomId(String uid1, String uid2) {
     return uid1.compareTo(uid2) < 0 ? '${uid1}_$uid2' : '${uid2}_$uid1';
   }
 
-  // 1. LẤY DANH SÁCH PHÒNG CHAT (Xưa giờ) - Realtime
+  // 1. LẤY DANH SÁCH PHÒNG CHAT - Realtime
   Stream<List<ChatRoomModel>> listenChatRooms(String currentUid) {
     return _db.child('chat_rooms').onValue.map((event) {
       final data = event.snapshot.value;
@@ -23,13 +34,11 @@ class ChatService {
         final roomMap = Map<String, dynamic>.from(value);
         final room = ChatRoomModel.fromMap(roomMap);
 
-        // Chỉ lấy phòng chat mà user hiện tại tham gia
         if (room.participants.contains(currentUid)) {
           rooms.add(room);
         }
       });
 
-      // Sắp xếp phòng có tin nhắn mới nhất lên đầu
       rooms.sort((a, b) => b.lastTimestamp.compareTo(a.lastTimestamp));
       return rooms;
     });
@@ -49,13 +58,12 @@ class ChatService {
         messages.add(MessageModel.fromMap(msgMap));
       });
 
-      // Sắp xếp tin nhắn cũ trước, tin nhắn mới sau để render từ trên xuống (hoặc reverse dưới lên)
       messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
       return messages;
     });
   }
 
-  // 3. GỬI TIN NHẮN & CẬP NHẬT STATE ĐỒNG THỜI (Multi-location Update)
+  // 3. GỬI TIN NHẮN & CẬP NHẬT STATE ĐỒNG THỜI
   Future<void> sendMessage({
     required String roomId,
     required MessageModel message,
@@ -63,37 +71,57 @@ class ChatService {
   }) async {
     final Map<String, dynamic> updates = {};
 
-    // Vị trí 1: Thêm tin nhắn vào lịch sử cuộc trò chuyện (node chats)
+    // Vị trí 1: Thêm tin nhắn vào node chats
     updates['/chats/$roomId/${message.messageId}'] = message.toMap();
 
-    // Vị trí 2: Cập nhật thông tin phòng chat bên ngoài (node chat_rooms) để hiển thị Preview
+    // Xử lý hiển thị tin nhắn cuối cùng (Ẩn link URL dài dòng, thay bằng [Hình ảnh], [Tệp tin]...)
+    String lastMessagePreview = message.text;
+    if (lastMessagePreview.isEmpty) {
+      switch (message.type) {
+        case 'image':
+          lastMessagePreview = '[Hình ảnh]';
+          break;
+        case 'file':
+          lastMessagePreview = '[Tệp tin]';
+          break;
+        case 'sticker':
+          lastMessagePreview = '[Sticker]';
+          break;
+        default:
+          lastMessagePreview = '[Tin nhắn]';
+      }
+    }
+
+    // Vị trí 2: Cập nhật thông tin phòng chat bên ngoài
     updates['/chat_rooms/$roomId/roomId'] = roomId;
     updates['/chat_rooms/$roomId/participants'] = participants;
-    updates['/chat_rooms/$roomId/lastMessage'] = message.text;
+    updates['/chat_rooms/$roomId/lastMessage'] = lastMessagePreview;
     updates['/chat_rooms/$roomId/lastSenderId'] = message.senderId;
     updates['/chat_rooms/$roomId/lastTimestamp'] = message.timestamp;
 
-    // Logic xử lý TĂNG SỐ TIN CHƯA ĐỌC (unreadCount) của đối phương
-    final friendUid = participants.firstWhere((id) => id != message.senderId);
+    for (final uid in participants) {
+      if (uid == message.senderId) continue;
 
-    // Sử dụng transaction ngầm thông qua đường dẫn cụ thể để tránh xung đột dữ liệu
-    final unreadRef = _db
-        .child('chat_rooms')
-        .child(roomId)
-        .child('unreadCount')
-        .child(friendUid);
-    final snapshot = await unreadRef.get();
-    int currentUnread = 0;
-    if (snapshot.exists) {
-      currentUnread = (snapshot.value as num).toInt();
+      final unreadRef = _db
+          .child('chat_rooms')
+          .child(roomId)
+          .child('unreadCount')
+          .child(uid);
+
+      final snapshot = await unreadRef.get();
+      int currentUnread = 0;
+
+      if (snapshot.exists) {
+        currentUnread = (snapshot.value as num).toInt();
+      }
+
+      updates['/chat_rooms/$roomId/unreadCount/$uid'] = currentUnread + 1;
     }
-    updates['/chat_rooms/$roomId/unreadCount/$friendUid'] = currentUnread + 1;
 
-    // Thực hiện lệnh cập nhật đồng bộ - Thành công cả 2 hoặc Thất bại cả 2
     await _db.update(updates);
   }
 
-  // 4. XÓA SỐ TIN CHƯA ĐỌC KHI MỞ PHÒNG CHAT (Đánh dấu đã đọc)
+  // 4. XÓA SỐ TIN CHƯA ĐỌC KHI MỞ PHÒNG CHAT
   Future<void> clearUnreadCount(String roomId, String currentUid) async {
     await _db
         .child('chat_rooms')
@@ -103,16 +131,48 @@ class ChatService {
         .set(0);
   }
 
+  // Cập nhật trạng thái đã xem (Refactor lại dùng luôn _db cho đồng bộ)
   Future<void> updateMessageStatus({
     required String roomId,
     required String messageId,
     required String status,
   }) async {
-    await FirebaseDatabase.instance
-        .ref()
+    await _db.child('chats').child(roomId).child(messageId).update({
+      'status': status,
+    });
+  }
+
+  // CẬP NHẬT REACTION (Thả / Đổi / Xóa cảm xúc)
+  Future<void> updateMessageReaction({
+    required String roomId,
+    required String messageId,
+    required String userId,
+    required String? reaction, // Nếu truyền null nghĩa là xóa reaction
+  }) async {
+    final reactionRef = _db
         .child('chats')
         .child(roomId)
         .child(messageId)
-        .update({'status': status});
+        .child('reactions')
+        .child(userId);
+
+    if (reaction == null) {
+      await reactionRef.remove(); // Xóa khỏi Firebase nếu user hủy reaction
+    } else {
+      await reactionRef.set(reaction); // Set emoji (VD: "❤️", "😂")
+    }
+  }
+
+  Future<String> uploadChatFile({
+    required Uint8List fileBytes,
+    required String fileName,
+  }) async {
+    final secureUrl = await _cloudinaryService.uploadFile(fileBytes, fileName);
+
+    if (secureUrl == null) {
+      throw Exception('Không lấy được URL sau khi upload lên Cloudinary');
+    }
+
+    return secureUrl; // Trả về link https để lưu vào Realtime Database
   }
 }
