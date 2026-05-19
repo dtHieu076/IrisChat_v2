@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1080265489076",
+    "project_id": "irischatproject",
+    "storage_bucket": "irischatproject.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1080265489076:android:69e978644242e04ad1f5e1",
+        "android_client_info": {
+          "package_name": "com.example.irischat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBPaP2PIUM2dBxj7OQxtE8vcVn7sCh0wgg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
