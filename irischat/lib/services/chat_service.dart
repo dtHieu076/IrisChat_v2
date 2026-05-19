@@ -175,4 +175,19 @@ class ChatService {
 
     return secureUrl; // Trả về link https để lưu vào Realtime Database
   }
+
+  // Recall mesage
+  Future<void> recallMessage({
+    required String roomId,
+    required String messageId,
+  }) async {
+    await _db.child('chats').child(roomId).child(messageId).update({
+      'isDeleted': true,
+      'text': '',
+      'mediaUrl': null,
+      'fileName': null,
+      'fileSize': null,
+      'reactions': null,
+    });
+  }
 }

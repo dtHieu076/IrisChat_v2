@@ -310,6 +310,18 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  // Recall message
+  Future<void> recallMessage({
+    required String roomId,
+    required String messageId,
+  }) async {
+    try {
+      await _chatService.recallMessage(roomId: roomId, messageId: messageId);
+    } catch (e) {
+      debugPrint('Recall message error: $e');
+    }
+  }
+
   // ===========================================================================
   // THOÁT PHÒNG CHAT
   // ===========================================================================
