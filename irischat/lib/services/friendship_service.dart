@@ -161,8 +161,8 @@ class FriendshipService {
       user1Id: request.senderId, // ID người gửi lời mời
       user2Id: request.receiverId, // ID người nhận (chính là người bấm đồng ý)
       since: DateTime.now(),
-      isBlocked: false,
-      isFavorite: false,
+      blockedBy: "",
+      isFavorite: [],
     );
 
     // 3. Ghi vào database bảng 'friends'

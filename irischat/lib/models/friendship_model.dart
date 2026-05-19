@@ -1,14 +1,9 @@
 class FriendshipModel {
   final String requestId;
-
   final String senderId;
-
   final String senderEmail;
-
   final String receiverId;
-
   final String status;
-
   final DateTime createdAt;
 
   const FriendshipModel({

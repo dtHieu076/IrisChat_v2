@@ -161,19 +161,46 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
 
-                Text(
-                  widget.room.isGroup
-                      ? 'Nhóm chat'
-                      : privateFriend?.isOnline ?? false
-                      ? 'Đang hoạt động'
-                      : 'Ngoại tuyến',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
+                widget.room.isGroup
+                    ? const Text(
+                        'Nhóm chat',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      )
+                    : Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: privateFriend?.isOnline ?? false
+                                  ? Colors.green
+                                  : Colors.grey,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+
+                          const SizedBox(width: 6),
+
+                          Text(
+                            privateFriend?.isOnline ?? false
+                                ? 'Đang hoạt động'
+                                : 'Ngoại tuyến',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: privateFriend?.isOnline ?? false
+                                  ? Colors.green
+                                  : Colors.grey,
+                              fontWeight: privateFriend?.isOnline ?? false
+                                  ? FontWeight.w500
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
               ],
             ),
-
             const Spacer(),
             //icon 3 chấm
             IconButton(

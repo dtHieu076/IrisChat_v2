@@ -1,17 +1,17 @@
 class FriendModel {
-  final String friendshipId; // ID duy nhất của mối quan hệ này
-  final String user1Id; // ID của người thứ nhất
-  final String user2Id; // ID của người thứ hai
-  final DateTime since; // Thời gian kết bạn
-  final bool isBlocked;
-  final bool isFavorite;
+  final String friendshipId;
+  final String user1Id;
+  final String user2Id;
+  final DateTime since;
+  final String blockedBy;
+  final List<String> isFavorite;
 
   const FriendModel({
     required this.friendshipId,
     required this.user1Id,
     required this.user2Id,
     required this.since,
-    required this.isBlocked,
+    required this.blockedBy,
     required this.isFavorite,
   });
 
@@ -23,8 +23,8 @@ class FriendModel {
       since: map['since'] != null
           ? DateTime.parse(map['since'])
           : DateTime.now(),
-      isBlocked: map['isBlocked'] ?? false,
-      isFavorite: map['isFavorite'] ?? false,
+      blockedBy: map['blockedBy'] ?? '',
+      isFavorite: List<String>.from(map['isFavorite'] ?? []),
     );
   }
 
@@ -34,7 +34,7 @@ class FriendModel {
       'user1Id': user1Id,
       'user2Id': user2Id,
       'since': since.toIso8601String(),
-      'isBlocked': isBlocked,
+      'blockedBy': blockedBy,
       'isFavorite': isFavorite,
     };
   }

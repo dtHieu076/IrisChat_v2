@@ -17,6 +17,16 @@ class ChatProvider extends ChangeNotifier {
 
   List<ChatRoomModel> get chatRooms => _chatRooms;
 
+  //
+  String _currentUid = '';
+  void setCurrentUid(String uid) {
+    _currentUid = uid;
+  }
+
+  bool get hasUnreadMessages {
+    return chatRooms.any((room) => (room.unreadCount[_currentUid] ?? 0) > 0);
+  }
+
   // ===========================================================================
   // STATE - TIN NHẮN TRONG PHÒNG
   // ===========================================================================
