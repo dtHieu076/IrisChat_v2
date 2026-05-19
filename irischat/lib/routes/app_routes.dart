@@ -3,4 +3,5 @@ class AppRoutes {
   static const register = '/register';
   static const home = '/home';
   static const chat = '/chat';
+  static const chatRoomInfo = '/chat-room-info';
 }

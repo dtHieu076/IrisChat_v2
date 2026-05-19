@@ -73,34 +73,22 @@ class ChatRoomModel {
   factory ChatRoomModel.fromMap(Map<String, dynamic> map) {
     // Firebase Realtime Database thường trả dynamic
     // nên cần ép kiểu an toàn
-
     final rawUnreadCount = map['unreadCount'] ?? {};
-
     final Map<String, int> formattedUnreadCount = {};
-
     rawUnreadCount.forEach((key, value) {
       formattedUnreadCount[key.toString()] = (value as num).toInt();
     });
 
     return ChatRoomModel(
       roomId: map['roomId'] ?? '',
-
       roomName: map['roomName'] ?? '',
-
       roomAvatar: map['roomAvatar'] ?? '',
-
       isGroup: map['isGroup'] ?? false,
-
       participants: List<String>.from(map['participants'] ?? []),
-
       lastMessage: map['lastMessage'] ?? '',
-
       lastSenderId: map['lastSenderId'] ?? '',
-
       lastTimestamp: (map['lastTimestamp'] ?? 0) as int,
-
       unreadCount: formattedUnreadCount,
-
       createdBy: map['createdBy'] ?? '',
     );
   }

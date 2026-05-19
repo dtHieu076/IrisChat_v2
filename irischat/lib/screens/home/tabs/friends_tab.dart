@@ -75,26 +75,40 @@ class _FriendsTabState extends State<FriendsTab> {
             child: Column(
               children: [
                 // SEARCH
-                TextField(
-                  controller: searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Tìm email bạn bè...',
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.search),
-                      onPressed: () async {
-                        final keyword = searchController.text.trim();
-                        if (keyword.isEmpty) return;
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Tìm email bạn bè...',
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.search),
+                            onPressed: () async {
+                              final keyword = searchController.text.trim();
+                              if (keyword.isEmpty) return;
 
-                        await friendshipProvider.searchByEmail(
-                          keyword: keyword,
-                          currentUid: widget.currentUser.uid,
-                        );
+                              await friendshipProvider.searchByEmail(
+                                keyword: keyword,
+                                currentUid: widget.currentUser.uid,
+                              );
+                            },
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      label: const Text("Tạo nhóm"),
+                      icon: const Icon(Icons.group_add),
+                      onPressed: () {
+                        _showCreateGroupDialog();
                       },
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+                  ],
                 ),
 
                 const SizedBox(height: 16),
@@ -222,6 +236,144 @@ class _FriendsTabState extends State<FriendsTab> {
             onPressed: () => provider.cancelRequest(req.requestId),
             child: const Text("Hủy"),
           ),
+        );
+      },
+    );
+  }
+
+  // Create group chat room (placeholder) =====================
+  // =========================================================
+  // FIX ĐOẠN ĐỐI THOẠI TẠO NHÓM Ở ĐÂY
+  // =========================================================
+  void _showCreateGroupDialog() {
+    // 1. Khai báo các Controller và danh sách để lưu trữ dữ liệu đầu vào
+    final TextEditingController groupNameController = TextEditingController();
+    List<String> selectedFriendIds = [];
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text("Tạo nhóm mới"),
+              content: SizedBox(
+                width: double.maxFinite,
+                height: 300,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: groupNameController, // Gán controller vào đây
+                      decoration: const InputDecoration(
+                        hintText: "Nhập tên nhóm...",
+                        prefixIcon: Icon(Icons.group),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        "Chọn thành viên:",
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: friendshipProvider.friendsList.isEmpty
+                          ? const Center(child: Text("Không có bạn bè để thêm"))
+                          : ListView.builder(
+                              itemCount: friendshipProvider.friendsList.length,
+                              itemBuilder: (context, index) {
+                                final friend =
+                                    friendshipProvider.friendsList[index];
+
+                                return CheckboxListTile(
+                                  secondary: CircleAvatar(
+                                    child: Text(
+                                      friend.displayName.isNotEmpty
+                                          ? friend.displayName[0].toUpperCase()
+                                          : '?',
+                                    ),
+                                  ),
+                                  title: Text(friend.displayName),
+                                  value: selectedFriendIds.contains(friend.uid),
+                                  onChanged: (value) {
+                                    setDialogState(() {
+                                      if (value == true) {
+                                        selectedFriendIds.add(friend.uid);
+                                      } else {
+                                        selectedFriendIds.remove(friend.uid);
+                                      }
+                                    });
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  child: const Text("Hủy"),
+                  onPressed: () {
+                    groupNameController.dispose();
+                    Navigator.pop(context);
+                  },
+                ),
+                ElevatedButton(
+                  child: const Text("Tạo"),
+                  onPressed: () async {
+                    final name = groupNameController.text.trim();
+
+                    // Validate dữ liệu đầu vào
+                    if (name.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Vui lòng nhập tên nhóm")),
+                      );
+                      return;
+                    }
+                    if (selectedFriendIds.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Vui lòng chọn ít nhất 1 người bạn"),
+                        ),
+                      );
+                      return;
+                    }
+
+                    try {
+                      // 2. Truyền chính xác các biến dữ liệu thực tế vào hàm của Provider
+                      final room = await friendshipProvider.createGroupChatRoom(
+                        currentUid: widget.currentUser.uid,
+                        groupName: name,
+                        friendIds: selectedFriendIds,
+                      );
+
+                      groupNameController.dispose();
+
+                      if (context.mounted) {
+                        Navigator.pop(context); // Đóng Dialog
+                        // Chuyển hướng thẳng vào màn hình chat nhóm vừa tạo
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.chat,
+                          arguments: room,
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text("Lỗi tạo nhóm: $e")),
+                        );
+                      }
+                    }
+                  },
+                ),
+              ],
+            );
+          },
         );
       },
     );

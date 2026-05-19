@@ -1,4 +1,5 @@
 import 'package:firebase_database/firebase_database.dart';
+import 'package:irischat/models/chat_room_model.dart';
 import 'package:irischat/models/friend_model.dart';
 import 'package:irischat/models/friendship_model.dart';
 
@@ -226,5 +227,17 @@ class FriendshipService {
 
       return friendsDetails;
     });
+  }
+
+  Future<void> createGroupChatRoom({required ChatRoomModel room}) async {
+    try {
+      await _db.child('chat_rooms').child(room.roomId).set(room.toMap());
+      print(
+        '[FriendshipService] Tạo phòng chat nhóm thành công: ${room.roomId}',
+      );
+    } catch (e) {
+      print('[FriendshipService] Lỗi createGroupChatRoom: $e');
+      rethrow;
+    }
   }
 }

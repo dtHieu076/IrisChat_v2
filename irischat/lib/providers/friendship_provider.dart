@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:irischat/models/chat_room_model.dart';
 
 import '../models/friendship_model.dart';
 import '../models/user_model.dart';
@@ -165,5 +166,26 @@ class FriendshipProvider extends ChangeNotifier {
       _friendsList = friends;
       notifyListeners(); // Thông báo cho UI vẽ lại giao diện
     });
+  }
+
+  // Create group chat room
+  Future<ChatRoomModel> createGroupChatRoom({
+    required String currentUid,
+    required String groupName,
+    required List<String> friendIds,
+  }) async {
+    final participants = [currentUid, ...friendIds];
+
+    final room = ChatRoomModel(
+      roomId: DateTime.now().millisecondsSinceEpoch.toString(),
+      roomName: groupName,
+      roomAvatar: '',
+      isGroup: true,
+      participants: participants,
+      createdBy: currentUid,
+      lastTimestamp: DateTime.now().millisecondsSinceEpoch,
+    );
+    await _service.createGroupChatRoom(room: room);
+    return room;
   }
 }

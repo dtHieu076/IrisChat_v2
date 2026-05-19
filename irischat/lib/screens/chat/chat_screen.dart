@@ -21,13 +21,18 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
 
   String? currentUid;
-  UserModel? friend;
+
+  // =========================================================
+  // THAY friend -> users map
+  // =========================================================
+  final Map<String, UserModel> users = {};
 
   @override
   void initState() {
     super.initState();
 
     final user = context.read<AuthProvider>().user;
+
     if (user == null) return;
 
     currentUid = user.uid;
@@ -42,19 +47,21 @@ class _ChatScreenState extends State<ChatScreen> {
 
       final userProvider = context.read<UserProvider>();
 
-      final friendUid = widget.room.participants.firstWhere(
-        (id) => id != currentUid,
-        orElse: () => '',
-      );
+      // =========================================================
+      // FETCH TOÀN BỘ USER TRONG ROOM
+      // =========================================================
+      for (final uid in widget.room.participants) {
+        if (uid == currentUid) continue;
 
-      if (friendUid.isNotEmpty) {
-        final fetched = await userProvider.fetchUserById(friendUid);
+        final fetched = await userProvider.fetchUserById(uid);
 
-        if (mounted) {
-          setState(() {
-            friend = fetched;
-          });
+        if (fetched != null) {
+          users[uid] = fetched;
         }
+      }
+
+      if (mounted) {
+        setState(() {});
       }
     });
   }
@@ -62,6 +69,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _messageController.dispose();
+
     _scrollController.dispose();
 
     try {
@@ -73,20 +81,18 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _onSendMessage() {
     final text = _messageController.text.trim();
+
     if (text.isEmpty) return;
 
     final user = context.read<AuthProvider>().user;
+
     if (user == null) return;
 
     final uid = user.uid;
 
-    final friendUid = widget.room.participants.firstWhere(
-      (id) => id != uid,
-      orElse: () => '',
-    );
-
-    if (friendUid.isEmpty) return;
-
+    // =========================================================
+    // BỎ LOGIC friendUid SAI CHO GROUP
+    // =========================================================
     context.read<ChatProvider>().sendTextMessage(
       roomId: widget.room.roomId,
       currentUid: uid,
@@ -100,12 +106,26 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
 
-    // SAFE GUARD - KHÔNG ĐỤNG UI
     if (user == null || currentUid == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     final uid = currentUid!;
+
+    // =========================================================
+    // CHAT 1-1
+    // =========================================================
+    UserModel? privateFriend;
+
+    if (!widget.room.isGroup) {
+      final friendUid = widget.room.participants.firstWhere(
+        (id) => id != uid,
+        orElse: () => '',
+      );
+
+      privateFriend = users[friendUid];
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -115,8 +135,8 @@ class _ChatScreenState extends State<ChatScreen> {
               child: Text(
                 widget.room.isGroup
                     ? widget.room.roomName[0].toUpperCase()
-                    : (friend?.displayName.isNotEmpty == true
-                          ? friend!.displayName[0].toUpperCase()
+                    : (privateFriend?.displayName.isNotEmpty == true
+                          ? privateFriend!.displayName[0].toUpperCase()
                           : 'U'),
                 style: const TextStyle(
                   color: Colors.blue,
@@ -124,7 +144,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
             ),
+
             const SizedBox(width: 12),
+
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
@@ -132,22 +154,40 @@ class _ChatScreenState extends State<ChatScreen> {
                 Text(
                   widget.room.isGroup
                       ? widget.room.roomName
-                      : friend?.displayName ?? 'Người dùng',
+                      : privateFriend?.displayName ?? 'Người dùng',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+
                 const SizedBox(height: 2),
+
                 Text(
                   widget.room.isGroup
                       ? 'Nhóm chat'
-                      : friend?.isOnline ?? false
+                      : privateFriend?.isOnline ?? false
                       ? 'Đang hoạt động'
                       : 'Ngoại tuyến',
                   style: const TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ],
+            ),
+
+            const Spacer(),
+            //icon 3 chấm
+            IconButton(
+              icon: const Icon(Icons.more_vert),
+              onPressed: () {
+                Navigator.pushNamed(
+                  context,
+                  '/chat-room-info',
+                  arguments: {
+                    'room': widget.room,
+                    'privateFriend': privateFriend,
+                  },
+                );
+              },
             ),
           ],
         ),
@@ -179,6 +219,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
                     final isMe = message.senderId == uid;
 
+                    final isGroup = widget.room.isGroup;
+
+                    // =========================================================
+                    // USER ĐANG GỬI TIN NHẮN
+                    // =========================================================
+                    final sender = users[message.senderId];
+
                     bool showDateSeparator = false;
 
                     if (index == messages.length - 1) {
@@ -209,6 +256,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             child: Row(
                               children: [
                                 const Expanded(child: Divider()),
+
                                 Padding(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 8,
@@ -222,6 +270,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                     ),
                                   ),
                                 ),
+
                                 const Expanded(child: Divider()),
                               ],
                             ),
@@ -253,6 +302,23 @@ class _ChatScreenState extends State<ChatScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                if (isGroup)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Text(
+                                      message.senderId == uid
+                                          ? 'Bạn'
+                                          : sender?.displayName ?? 'Người dùng',
+                                      style: TextStyle(
+                                        color: isMe
+                                            ? Colors.white70
+                                            : Colors.black54,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -271,6 +337,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
                                     if (isMe) ...[
                                       const SizedBox(width: 4),
+
                                       Icon(
                                         message.status == 'read'
                                             ? Icons.done_all
@@ -321,6 +388,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 );
               }
+
               return const SizedBox.shrink();
             },
           ),
@@ -346,7 +414,9 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                     ),
                   ),
+
                   const SizedBox(width: 8),
+
                   CircleAvatar(
                     backgroundColor: Colors.blue,
                     child: IconButton(

@@ -61,7 +61,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
           BottomNavigationBarItem(
             label: 'Friends',
-
             icon: Consumer<FriendshipProvider>(
               builder: (context, friendshipProvider, child) {
                 return Stack(
