@@ -31,44 +31,72 @@ class FriendshipProvider extends ChangeNotifier {
   // =========================
   // SEARCH
   // =========================
-  List<UserModel> _searchUsers = [];
-  List<UserModel> get searchUsers => _searchUsers;
+  UserModel? _searchedUser;
+  UserModel? get searchedUser => _searchedUser;
   bool _isSearching = false;
   bool get isSearching => _isSearching;
 
-  // =========================
   // SEARCH USER
-  // =========================
-
   Future<void> searchByEmail({
     required String keyword,
-
     required String currentUid,
   }) async {
     _isSearching = true;
-
+    _searchedUser = null; // Reset kết quả cũ
     notifyListeners();
 
     try {
-      _searchUsers = await _service.searchUsersByEmail(
+      // Vì hàm _service.searchUsersByEmail của bạn trả về List, ta lấy phần tử đầu tiên
+      final results = await _service.searchUsersByEmail(
         keyword: keyword,
         currentUid: currentUid,
       );
+
+      if (results.isNotEmpty) {
+        _searchedUser = results.first;
+      }
     } catch (e) {
-      print(
-        '[FriendshipProvider] '
-        'search error: $e',
-      );
+      print('[FriendshipProvider] search error: $e');
     } finally {
       _isSearching = false;
       notifyListeners();
     }
   }
 
-  // =========================
-  // SEND REQUEST
-  // =========================
+  void clearSearch() {
+    _searchedUser = null;
+    notifyListeners();
+  }
 
+  Future<void> sendFriendRequest({
+    required String senderId,
+    required String senderEmail,
+    required String receiverEmail, // Ở UI bạn đang truyền email
+  }) async {
+    try {
+      if (_searchedUser == null || _searchedUser!.email != receiverEmail) {
+        throw Exception("Không tìm thấy ID người nhận hợp lệ");
+      }
+
+      final String receiverId = _searchedUser!.uid;
+
+      final request = await _service.sendFriendRequest(
+        senderId: senderId,
+        senderEmail: senderEmail,
+        receiverId: receiverId,
+      );
+
+      _sentRequests.add(request);
+      notifyListeners();
+
+      print('[FriendshipProvider] request added local state');
+    } catch (e) {
+      print('[FriendshipProvider] send request error: $e');
+      rethrow;
+    }
+  }
+
+  // x ----------SEND REQUEST
   Future<void> sendRequest({
     required String senderId,
 
@@ -99,10 +127,7 @@ class FriendshipProvider extends ChangeNotifier {
     }
   }
 
-  // =========================
   // LISTEN RECEIVED REQUESTS
-  // =========================
-
   void listenReceivedRequests(String currentUid) {
     _service.listenReceivedRequests(currentUid).listen((requests) {
       _receivedRequests = requests;
@@ -117,9 +142,7 @@ class FriendshipProvider extends ChangeNotifier {
     });
   }
 
-  // =========================
   // LISTEN SENT REQUESTS
-  // =========================
   void listenSentRequests(String currentUid) {
     _service.listenSentRequests(currentUid).listen((requests) {
       _sentRequests = requests; // Cập nhật danh sách lời mời đã gửi realtime
@@ -187,5 +210,20 @@ class FriendshipProvider extends ChangeNotifier {
     );
     await _service.createGroupChatRoom(room: room);
     return room;
+  }
+
+  // REMOVE FRIEND
+  Future<void> removeFriend({
+    required String currentUid,
+    required String friendUid,
+  }) async {
+    try {
+      await _service.deleteFriend(currentUid: currentUid, friendUid: friendUid);
+      print('[FriendshipProvider] Xóa bạn thành công');
+      // Lưu ý: Không cần gọi notifyListeners() hay xóa thủ công khỏi _friendsList
+      // vì hàm listenFriends() dùng Stream sẽ tự động nhận diện thay đổi từ Firebase và cập nhật lại list!
+    } catch (e) {
+      print('[FriendshipProvider] Lỗi removeFriend: $e');
+    }
   }
 }

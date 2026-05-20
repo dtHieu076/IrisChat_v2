@@ -49,6 +49,30 @@ class ChatRoomModel {
     );
   }
 
+  static String generate1to1RoomId(String uid1, String uid2) {
+    return (uid1.hashCode <= uid2.hashCode) ? '${uid1}_$uid2' : '${uid2}_$uid1';
+  }
+
+  factory ChatRoomModel.create1to1({
+    required String currentUid,
+    required String friendUid,
+    required String friendName,
+    required String friendAvatar,
+  }) {
+    return ChatRoomModel(
+      roomId: generate1to1RoomId(currentUid, friendUid),
+      roomName: friendName,
+      roomAvatar: friendAvatar,
+      isGroup: false,
+      participants: [currentUid, friendUid],
+      lastMessage: '',
+      lastSenderId: '',
+      lastTimestamp: DateTime.now().millisecondsSinceEpoch,
+      unreadCount: const {},
+      createdBy: currentUid,
+    );
+  }
+
   // ===========================================================================
   // FIREBASE -> MAP
   // ===========================================================================

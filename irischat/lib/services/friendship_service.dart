@@ -240,4 +240,49 @@ class FriendshipService {
       rethrow;
     }
   }
+
+  // =========================
+  // DELETE FRIEND (HỦY KẾT BẠN)
+  // =========================
+  Future<void> deleteFriend({
+    required String currentUid,
+    required String friendUid,
+  }) async {
+    try {
+      // 1. Lấy toàn bộ danh sách friends để tìm ID của mối quan hệ
+      final snapshot = await _db.child('friends').get();
+
+      if (!snapshot.exists) return;
+
+      final data = Map<dynamic, dynamic>.from(snapshot.value as dynamic);
+      String? targetFriendshipId;
+
+      // 2. Duyệt qua để tìm bản ghi chứa cả 2 ID (dù ai là user1 hay user2)
+      data.forEach((key, value) {
+        final map = Map<String, dynamic>.from(value);
+        final user1Id = map['user1Id'];
+        final user2Id = map['user2Id'];
+
+        final isMatch1 = user1Id == currentUid && user2Id == friendUid;
+        final isMatch2 = user1Id == friendUid && user2Id == currentUid;
+
+        if (isMatch1 || isMatch2) {
+          targetFriendshipId = key; // Lấy key của bản ghi cần xóa
+        }
+      });
+
+      // 3. Nếu tìm thấy thì tiến hành xóa khỏi database
+      if (targetFriendshipId != null) {
+        await _db.child('friends').child(targetFriendshipId!).remove();
+        print(
+          '[FriendshipService] Đã xóa bản ghi tình bạn: $targetFriendshipId',
+        );
+      } else {
+        print('[FriendshipService] Không tìm thấy dữ liệu bạn bè để xóa');
+      }
+    } catch (e) {
+      print('[FriendshipService] Lỗi deleteFriend: $e');
+      rethrow;
+    }
+  }
 }

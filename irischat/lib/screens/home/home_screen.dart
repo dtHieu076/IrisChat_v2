@@ -64,7 +64,6 @@ class _HomeScreenState extends State<HomeScreen> {
         items: [
           BottomNavigationBarItem(
             label: 'Home',
-
             icon: Consumer<ChatProvider>(
               builder: (context, chatProvider, child) {
                 return Stack(

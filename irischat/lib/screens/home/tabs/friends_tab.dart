@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:irischat/models/chat_room_model.dart';
 import 'package:irischat/models/user_model.dart';
+import 'package:irischat/screens/home/widget/friendship_action_button.dart';
 import 'package:provider/provider.dart';
 
 import '../../../providers/friendship_provider.dart';
@@ -37,33 +38,16 @@ class _FriendsTabState extends State<FriendsTab> {
     super.dispose();
   }
 
-  // =========================================================
   // CREATE OR GET CHAT ROOM (1-1)
-  // =========================================================
   ChatRoomModel _createRoom(UserModel friend) {
-    final currentUid = widget.currentUser.uid;
-
-    final roomId = (currentUid.hashCode <= friend.uid.hashCode)
-        ? '${currentUid}_${friend.uid}'
-        : '${friend.uid}_${currentUid}';
-
-    return ChatRoomModel(
-      roomId: roomId,
-      roomName: friend.displayName,
-      roomAvatar: friend.avatarUrl,
-      isGroup: false,
-      participants: [currentUid, friend.uid],
-      lastMessage: '',
-      lastSenderId: '',
-      lastTimestamp: DateTime.now().millisecondsSinceEpoch,
-      unreadCount: {},
-      createdBy: currentUid,
+    return ChatRoomModel.create1to1(
+      currentUid: widget.currentUser.uid,
+      friendUid: friend.uid,
+      friendName: friend.displayName,
+      friendAvatar: friend.avatarUrl,
     );
   }
 
-  // =========================================================
-  // BUILD
-  // =========================================================
   @override
   Widget build(BuildContext context) {
     return Consumer<FriendshipProvider>(
@@ -74,14 +58,13 @@ class _FriendsTabState extends State<FriendsTab> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                // SEARCH
                 Row(
                   children: [
                     Expanded(
                       child: TextField(
                         controller: searchController,
                         decoration: InputDecoration(
-                          hintText: 'Tìm email bạn bè...',
+                          hintText: 'Search friends by email...',
                           suffixIcon: IconButton(
                             icon: const Icon(Icons.search),
                             onPressed: () async {
@@ -102,7 +85,7 @@ class _FriendsTabState extends State<FriendsTab> {
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
-                      label: const Text("Tạo nhóm"),
+                      label: const Text("Create Group"),
                       icon: const Icon(Icons.group_add),
                       onPressed: () {
                         _showCreateGroupDialog();
@@ -111,30 +94,34 @@ class _FriendsTabState extends State<FriendsTab> {
                   ],
                 ),
 
+                // Post-search result card
+                if (friendshipProvider.searchedUser != null) ...[
+                  const SizedBox(height: 16),
+                  _buildSearchResultCard(friendshipProvider),
+                ],
+
                 const SizedBox(height: 16),
 
-                // TAB BAR
                 TabBar(
                   labelColor: Colors.blue,
                   unselectedLabelColor: Colors.grey,
                   tabs: [
                     Tab(
                       text:
-                          'Đã nhận (${friendshipProvider.receivedRequests.length})',
+                          'Received (${friendshipProvider.receivedRequests.length})',
                     ),
                     Tab(
                       text:
-                          'Đã gửi (${friendshipProvider.sentRequests.length})',
+                          'Sent (${friendshipProvider.sentRequests.length})',
                     ),
                     Tab(
-                      text: 'Bạn bè (${friendshipProvider.friendsList.length})',
+                      text: 'Friends (${friendshipProvider.friendsList.length})',
                     ),
                   ],
                 ),
 
                 const SizedBox(height: 12),
 
-                // TAB VIEW
                 Expanded(
                   child: TabBarView(
                     children: [
@@ -152,12 +139,66 @@ class _FriendsTabState extends State<FriendsTab> {
     );
   }
 
-  // =========================================================
-  // FRIENDS TAB (FIXED NAVIGATION)
-  // =========================================================
+  Widget _buildSearchResultCard(FriendshipProvider provider) {
+    final searchedUser = provider.searchedUser!;
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 24,
+              backgroundImage: searchedUser.avatarUrl.isNotEmpty
+                  ? NetworkImage(searchedUser.avatarUrl)
+                  : null,
+              child: searchedUser.avatarUrl.isEmpty
+                  ? Text(searchedUser.displayName[0].toUpperCase())
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    searchedUser.displayName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    searchedUser.email,
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            FriendshipActionButton(
+              targetUser: searchedUser,
+              currentUser: widget.currentUser,
+            ),
+
+            IconButton(
+              icon: const Icon(Icons.close, size: 18, color: Colors.grey),
+              onPressed: () {
+                provider.clearSearch();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildFriendsTab(FriendshipProvider provider) {
     if (provider.friendsList.isEmpty) {
-      return const Center(child: Text("Chưa có bạn bè"));
+      return const Center(child: Text("No friends yet"));
     }
 
     return ListView.builder(
@@ -167,17 +208,18 @@ class _FriendsTabState extends State<FriendsTab> {
 
         return ListTile(
           leading: CircleAvatar(
-            child: Text(friend.displayName[0].toUpperCase()),
+            child: Text(
+              friend.displayName.isNotEmpty
+                  ? friend.displayName[0].toUpperCase()
+                  : '?',
+            ),
           ),
           title: Text(friend.displayName),
           subtitle: Text(friend.email),
-
           trailing: IconButton(
             icon: const Icon(Icons.chat, color: Colors.blue),
-
             onPressed: () {
               final room = _createRoom(friend);
-
               Navigator.pushNamed(context, AppRoutes.chat, arguments: room);
             },
           ),
@@ -186,10 +228,9 @@ class _FriendsTabState extends State<FriendsTab> {
     );
   }
 
-  // =========================================================
   Widget _buildReceivedTab(FriendshipProvider provider) {
     if (provider.receivedRequests.isEmpty) {
-      return const Center(child: Text("Không có lời mời"));
+      return const Center(child: Text("No pending requests"));
     }
 
     return ListView.builder(
@@ -199,7 +240,7 @@ class _FriendsTabState extends State<FriendsTab> {
 
         return ListTile(
           title: Text(req.senderEmail),
-          subtitle: const Text("Lời mời kết bạn"),
+          subtitle: const Text("Friend request"),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -218,10 +259,9 @@ class _FriendsTabState extends State<FriendsTab> {
     );
   }
 
-  // =========================================================
   Widget _buildSentTab(FriendshipProvider provider) {
     if (provider.sentRequests.isEmpty) {
-      return const Center(child: Text("Chưa gửi lời mời"));
+      return const Center(child: Text("No sent requests"));
     }
 
     return ListView.builder(
@@ -231,22 +271,17 @@ class _FriendsTabState extends State<FriendsTab> {
 
         return ListTile(
           title: Text(req.receiverId),
-          subtitle: const Text("Đang chờ"),
+          subtitle: const Text("Pending"),
           trailing: TextButton(
             onPressed: () => provider.cancelRequest(req.requestId),
-            child: const Text("Hủy"),
+            child: const Text("Cancel"),
           ),
         );
       },
     );
   }
 
-  // Create group chat room (placeholder) =====================
-  // =========================================================
-  // FIX ĐOẠN ĐỐI THOẠI TẠO NHÓM Ở ĐÂY
-  // =========================================================
   void _showCreateGroupDialog() {
-    // 1. Khai báo các Controller và danh sách để lưu trữ dữ liệu đầu vào
     final TextEditingController groupNameController = TextEditingController();
     List<String> selectedFriendIds = [];
 
@@ -256,7 +291,7 @@ class _FriendsTabState extends State<FriendsTab> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text("Tạo nhóm mới"),
+              title: const Text("Create New Group"),
               content: SizedBox(
                 width: double.maxFinite,
                 height: 300,
@@ -264,9 +299,9 @@ class _FriendsTabState extends State<FriendsTab> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextField(
-                      controller: groupNameController, // Gán controller vào đây
+                      controller: groupNameController,
                       decoration: const InputDecoration(
-                        hintText: "Nhập tên nhóm...",
+                        hintText: "Enter group name...",
                         prefixIcon: Icon(Icons.group),
                       ),
                     ),
@@ -274,14 +309,14 @@ class _FriendsTabState extends State<FriendsTab> {
                     const Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        "Chọn thành viên:",
+                        "Select members:",
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
                     const SizedBox(height: 8),
                     Expanded(
                       child: friendshipProvider.friendsList.isEmpty
-                          ? const Center(child: Text("Không có bạn bè để thêm"))
+                          ? const Center(child: Text("No friends to add"))
                           : ListView.builder(
                               itemCount: friendshipProvider.friendsList.length,
                               itemBuilder: (context, index) {
@@ -316,35 +351,33 @@ class _FriendsTabState extends State<FriendsTab> {
               ),
               actions: [
                 TextButton(
-                  child: const Text("Hủy"),
+                  child: const Text("Cancel"),
                   onPressed: () {
                     groupNameController.dispose();
                     Navigator.pop(context);
                   },
                 ),
                 ElevatedButton(
-                  child: const Text("Tạo"),
+                  child: const Text("Create"),
                   onPressed: () async {
                     final name = groupNameController.text.trim();
 
-                    // Validate dữ liệu đầu vào
                     if (name.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Vui lòng nhập tên nhóm")),
+                        const SnackBar(content: Text("Please enter a group name")),
                       );
                       return;
                     }
                     if (selectedFriendIds.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text("Vui lòng chọn ít nhất 1 người bạn"),
+                          content: Text("Please select at least 1 friend"),
                         ),
                       );
                       return;
                     }
 
                     try {
-                      // 2. Truyền chính xác các biến dữ liệu thực tế vào hàm của Provider
                       final room = await friendshipProvider.createGroupChatRoom(
                         currentUid: widget.currentUser.uid,
                         groupName: name,
@@ -354,8 +387,7 @@ class _FriendsTabState extends State<FriendsTab> {
                       groupNameController.dispose();
 
                       if (context.mounted) {
-                        Navigator.pop(context); // Đóng Dialog
-                        // Chuyển hướng thẳng vào màn hình chat nhóm vừa tạo
+                        Navigator.pop(context);
                         Navigator.pushNamed(
                           context,
                           AppRoutes.chat,
@@ -365,7 +397,7 @@ class _FriendsTabState extends State<FriendsTab> {
                     } catch (e) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text("Lỗi tạo nhóm: $e")),
+                          SnackBar(content: Text("Error creating group: $e")),
                         );
                       }
                     }
