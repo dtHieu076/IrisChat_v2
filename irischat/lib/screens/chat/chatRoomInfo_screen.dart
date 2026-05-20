@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:irischat/models/chat_room_model.dart';
 import 'package:irischat/models/user_model.dart';
+import 'package:irischat/providers/friendship_provider.dart';
 
 class ChatRoomInfoScreen extends StatelessWidget {
   final ChatRoomModel room;
@@ -183,7 +185,9 @@ class ChatRoomInfoScreen extends StatelessWidget {
                 icon: Icons.delete,
                 title: 'Unfriend',
                 textColor: Colors.red,
-                onTap: () {},
+                onTap: () {
+                  _showUnfriendDialog(context);
+                },
               ),
             ],
 
@@ -239,6 +243,49 @@ class ChatRoomInfoScreen extends StatelessWidget {
       ),
       trailing: const Icon(Icons.chevron_right),
       onTap: onTap,
+    );
+  }
+
+  void _showUnfriendDialog(BuildContext screenContext) {
+    showDialog(
+      context: screenContext,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Unfriend'),
+        content: const Text('Are you sure you want to unfriend this person?'),
+        actions: [
+          TextButton(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(dialogContext),
+          ),
+          TextButton(
+            child: const Text('Unfriend', style: TextStyle(color: Colors.red)),
+            onPressed: () async {
+              if (privateFriend == null) return;
+
+              final currentUid = room.participants.firstWhere(
+                (uid) => uid != privateFriend!.uid,
+                orElse: () => '',
+              );
+
+              if (currentUid.isEmpty) return;
+
+              await screenContext.read<FriendshipProvider>().removeFriend(
+                currentUid: currentUid,
+                friendUid: privateFriend!.uid,
+              );
+
+              // 3. Kiểm tra xem màn hình còn tồn tại không trước khi chuyển hướng
+              if (!dialogContext.mounted) return;
+
+              Navigator.pop(dialogContext);
+
+              // 5. Nếu muốn đóng luôn màn hình Info để quay về phòng chat, dùng tiếp dòng dưới:
+              if (!screenContext.mounted) return;
+              Navigator.pop(screenContext);
+            },
+          ),
+        ],
+      ),
     );
   }
 }

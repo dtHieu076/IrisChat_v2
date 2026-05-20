@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:irischat/providers/user_provider.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/chat_room_model.dart';
@@ -91,127 +92,175 @@ class _HomeTabState extends State<HomeTab> {
               final ChatRoomModel room = rooms[index];
               final isGroup = room.isGroup;
 
-              UserModel? friendInfo;
-
-              if (!isGroup) {
-                final friendUid = room.participants.firstWhere(
-                  (id) => id != currentUid,
-                  orElse: () => '',
+              // 1. Nếu là nhóm chat -> Hiển thị luôn
+              if (isGroup) {
+                return _buildChatTile(
+                  context: context,
+                  room: room,
+                  displayName: room.roomName,
+                  avatarUrl: room.roomAvatar,
+                  currentUid: currentUid,
+                  friendInfo: null,
                 );
-
-                friendInfo = friendsList
-                    .where((f) => f.uid == friendUid)
-                    .cast<UserModel?>()
-                    .firstWhere((e) => e != null, orElse: () => null);
-
-                if (friendInfo == null) {
-                  return const SizedBox.shrink();
-                }
               }
 
-              final displayName = isGroup
-                  ? room.roomName
-                  : friendInfo!.displayName;
+              // 2. Nếu là chat 1-1, tìm UID đối phương
+              final friendUid = room.participants.firstWhere(
+                (id) => id != currentUid,
+                orElse: () => '',
+              );
 
-              final avatarUrl = isGroup
-                  ? room.roomAvatar
-                  : friendInfo!.avatarUrl;
+              // 3. Khớp từ danh sách bạn bè đang có sẵn trong máy (Realtime)
+              final friendInList = friendsList.any((f) => f.uid == friendUid)
+                  ? friendsList.firstWhere((f) => f.uid == friendUid)
+                  : null;
 
-              final unreadCount = room.unreadCount[currentUid] ?? 0;
-              final hasUnread = unreadCount > 0;
+              if (friendInList != null) {
+                return _buildChatTile(
+                  context: context,
+                  room: room,
+                  displayName: friendInList.displayName,
+                  avatarUrl: friendInList.avatarUrl,
+                  currentUid: currentUid,
+                  friendInfo: friendInList,
+                );
+              }
 
-              return ListTile(
-                onTap: () {
-                  Navigator.pushNamed(context, AppRoutes.chat, arguments: room);
-                },
-
-                leading: CircleAvatar(
-                  radius: 26,
-                  backgroundColor: Colors.blue.shade100,
-                  backgroundImage: avatarUrl.isNotEmpty
-                      ? NetworkImage(avatarUrl)
-                      : null,
-                  child: avatarUrl.isEmpty
-                      ? Text(
-                          displayName.isNotEmpty
-                              ? displayName[0].toUpperCase()
-                              : 'U',
-                          style: const TextStyle(
-                            color: Colors.blue,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
-                        )
-                      : null,
-                ),
-
-                title: Text(
-                  displayName,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: hasUnread ? FontWeight.bold : FontWeight.w500,
-                  ),
-                ),
-
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    room.lastSenderId == currentUid
-                        ? 'Bạn: ${room.lastMessage}'
-                        : room.lastMessage,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: hasUnread ? Colors.black87 : Colors.grey.shade600,
-                      fontWeight: hasUnread
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                    ),
-                  ),
-                ),
-
-                trailing: SizedBox(
-                  width: 60,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        _formatTimestamp(room.lastTimestamp),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: hasUnread ? Colors.blue.shade700 : Colors.grey,
-                          fontWeight: hasUnread
-                              ? FontWeight.bold
-                              : FontWeight.normal,
+              // 4. ĐÚNG CHUẨN KIẾN TRÚC: Gọi thông qua UserProvider
+              return FutureBuilder<UserModel?>(
+                future: context.read<UserProvider>().fetchUserById(friendUid),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const SizedBox(
+                      height: 72,
+                      child: Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                       ),
-                      if (hasUnread) ...[
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: const BoxDecoration(
-                            color: Colors.blue,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            '$unreadCount',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+                    );
+                  }
+
+                  // Nếu tìm thấy thông tin user lạ thông qua Provider
+                  if (snapshot.hasData && snapshot.data != null) {
+                    final strangerUser = snapshot.data!;
+                    return _buildChatTile(
+                      context: context,
+                      room: room,
+                      displayName: strangerUser.displayName,
+                      avatarUrl: strangerUser.avatarUrl,
+                      currentUid: currentUid,
+                      friendInfo: strangerUser,
+                    );
+                  }
+
+                  // Backup phòng hờ nếu user đó lỗi hoặc xóa tài khoản
+                  return _buildChatTile(
+                    context: context,
+                    room: room,
+                    displayName: 'Người dùng IrisChat',
+                    avatarUrl: '',
+                    currentUid: currentUid,
+                    friendInfo: null,
+                  );
+                },
               );
             },
           );
         },
+      ),
+    );
+  }
+
+  // Hàm phụ giúp render ô chat dễ dàng hơn, tránh lặp lại code giao diện
+  Widget _buildChatTile({
+    required BuildContext context,
+    required ChatRoomModel room,
+    required String displayName,
+    required String avatarUrl,
+    required String currentUid,
+    required UserModel? friendInfo,
+  }) {
+    final unreadCount = room.unreadCount[currentUid] ?? 0;
+    final hasUnread = unreadCount > 0;
+
+    return ListTile(
+      onTap: () {
+        Navigator.pushNamed(context, AppRoutes.chat, arguments: room);
+      },
+      leading: CircleAvatar(
+        radius: 26,
+        backgroundColor: Colors.blue.shade100,
+        backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+        child: avatarUrl.isEmpty
+            ? Text(
+                displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
+                style: const TextStyle(
+                  color: Colors.blue,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              )
+            : null,
+      ),
+      title: Text(
+        displayName,
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: hasUnread ? FontWeight.bold : FontWeight.w500,
+        ),
+      ),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(
+          room.lastSenderId == currentUid
+              ? 'Bạn: ${room.lastMessage}'
+              : room.lastMessage,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 14,
+            color: hasUnread ? Colors.black87 : Colors.grey.shade600,
+            fontWeight: hasUnread ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+      trailing: SizedBox(
+        width: 60,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              _formatTimestamp(room.lastTimestamp),
+              style: TextStyle(
+                fontSize: 12,
+                color: hasUnread ? Colors.blue.shade700 : Colors.grey,
+                fontWeight: hasUnread ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+            if (hasUnread) ...[
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: const BoxDecoration(
+                  color: Colors.blue,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '$unreadCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

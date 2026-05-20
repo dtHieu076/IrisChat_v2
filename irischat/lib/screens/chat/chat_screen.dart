@@ -3,6 +3,10 @@ import 'package:irischat/models/chat_room_model.dart';
 import 'package:irischat/models/message_model.dart';
 import 'package:irischat/models/user_model.dart';
 import 'package:irischat/providers/user_provider.dart';
+import 'package:irischat/screens/chat/widget/ChatAppBarWidget.dart';
+import 'package:irischat/screens/chat/widget/ChatInputWidget.dart';
+import 'package:irischat/screens/chat/widget/ChatSendingIndecatorWidget.dart';
+import 'package:irischat/screens/chat/widget/NotFriendWarningWidget.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -23,10 +27,10 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
 
   String? currentUid;
-  final Map<String, UserModel> users = {};
-  MessageModel? _replyingMessage;
-
   UserModel? privateFriend;
+  final Map<String, UserModel> users = {};
+
+  MessageModel? _replyingMessage;
 
   @override
   void initState() {
@@ -122,110 +126,31 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            _buildAvatar(),
-            const SizedBox(width: 12),
-            _buildChatTitleInfo(),
-            const Spacer(),
-            _buildMenuButton(),
-          ],
-        ),
+      appBar: ChatAppBarWidget(
+        room: widget.room,
+        privateFriend: privateFriend,
+        onSearchPressed:
+            _showSearchDialog, // Pass the search dialog function to the AppBar widget
       ),
+
       body: Column(
         children: [
+          NotFriendWarningWidget(
+            room: widget.room,
+            privateFriend: privateFriend,
+          ),
           Expanded(child: _buildMessageList()),
-          _buildSendingIndicator(),
-          SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_replyingMessage != null) _buildReplyPreview(),
-                _buildInputArea(),
-              ],
-            ),
+          ChatSendingIndicatorWidget(),
+          ChatInputWidget(
+            controller: _messageController,
+            replyingMessage: _replyingMessage,
+            onSendPressed: _onSendMessage,
+            onPickImage: () => _pickAndSendMedia('image'),
+            onPickFile: () => _pickAndSendMedia('file'),
+            onCancelReply: () => setState(() => _replyingMessage = null),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildAvatar() {
-    String initial = 'U';
-    if (widget.room.isGroup) {
-      initial = widget.room.roomName.isNotEmpty
-          ? widget.room.roomName[0].toUpperCase()
-          : 'G';
-    } else if (privateFriend?.displayName.isNotEmpty == true) {
-      initial = privateFriend!.displayName[0].toUpperCase();
-    }
-
-    return CircleAvatar(
-      backgroundColor: Colors.blue.shade100,
-      child: Text(
-        initial,
-        style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-
-  Widget _buildChatTitleInfo() {
-    final isOnline = privateFriend?.isOnline ?? false;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          widget.room.isGroup
-              ? widget.room.roomName
-              : (privateFriend?.displayName ?? 'User'),
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 4),
-        widget.room.isGroup
-            ? const Text(
-                'Group Chat',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              )
-            : Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: isOnline ? Colors.green : Colors.grey,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    isOnline ? 'Online' : 'Offline',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isOnline ? Colors.green : Colors.grey,
-                      fontWeight: isOnline
-                          ? FontWeight.w500
-                          : FontWeight.normal,
-                    ),
-                  ),
-                ],
-              ),
-      ],
-    );
-  }
-
-  Widget _buildMenuButton() {
-    return IconButton(
-      icon: const Icon(Icons.more_vert),
-      onPressed: () {
-        Navigator.pushNamed(
-          context,
-          '/chat-room-info',
-          arguments: {'room': widget.room, 'privateFriend': privateFriend},
-        );
-      },
     );
   }
 
@@ -286,6 +211,32 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             );
           },
+        );
+      },
+    );
+  }
+
+  void _showSearchDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Search Messages'),
+          content: TextField(
+            decoration: const InputDecoration(
+              hintText: 'Enter keyword...',
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: (keyword) {
+              Navigator.pop(context);
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
         );
       },
     );
@@ -476,6 +427,8 @@ class _ChatScreenState extends State<ChatScreen> {
     bool isMe,
     UserModel? sender,
   ) {
+    final bool isImageMessage =
+        message.type == 'image' && message.mediaUrl != null;
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Column(
@@ -485,15 +438,31 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Container(
             margin: const EdgeInsets.symmetric(vertical: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: isImageMessage
+                ? EdgeInsets.zero
+                : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+
             decoration: BoxDecoration(
-              color: isMe ? Colors.blue : Colors.grey.shade200,
+              color: isImageMessage
+                  ? Colors.white
+                  : (isMe ? Colors.blueAccent : Colors.grey.shade200),
+
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(16),
                 topRight: const Radius.circular(16),
                 bottomLeft: Radius.circular(isMe ? 16 : 0),
                 bottomRight: Radius.circular(isMe ? 0 : 16),
               ),
+
+              boxShadow: isImageMessage
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ]
+                  : null,
             ),
             constraints: BoxConstraints(
               maxWidth: MediaQuery.of(context).size.width * 0.75,
@@ -700,108 +669,6 @@ class _ChatScreenState extends State<ChatScreen> {
               )
               .toList(),
         ),
-      ),
-    );
-  }
-
-  Widget _buildSendingIndicator() {
-    return Consumer<ChatProvider>(
-      builder: (context, chatProvider, child) {
-        if (!chatProvider.isSending) return const SizedBox.shrink();
-        return const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              'Sending...',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildReplyPreview() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: Colors.grey.shade100,
-      child: Row(
-        children: [
-          const Icon(Icons.reply, color: Colors.blue, size: 20),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Replying...',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue,
-                  ),
-                ),
-                Text(
-                  _replyingMessage!.text.isNotEmpty
-                      ? _replyingMessage!.text
-                      : (_replyingMessage!.type == 'image'
-                            ? '[Image]'
-                            : '[File]'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13, color: Colors.black54),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, size: 18),
-            onPressed: () => setState(() => _replyingMessage = null),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInputArea() {
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.image, color: Colors.blue),
-            onPressed: () => _pickAndSendMedia('image'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.attach_file, color: Colors.blue),
-            onPressed: () => _pickAndSendMedia('file'),
-          ),
-          Expanded(
-            child: TextField(
-              controller: _messageController,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: InputDecoration(
-                hintText: 'Enter a message...',
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          CircleAvatar(
-            backgroundColor: Colors.blue,
-            child: IconButton(
-              icon: const Icon(Icons.send, color: Colors.white, size: 18),
-              onPressed: _onSendMessage,
-            ),
-          ),
-        ],
       ),
     );
   }
