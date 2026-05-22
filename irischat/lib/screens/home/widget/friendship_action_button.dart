@@ -77,7 +77,7 @@ class FriendshipActionButton extends StatelessWidget {
           await provider.sendFriendRequest(
             senderId: currentUser.uid,
             senderEmail: currentUser.email,
-            receiverEmail: targetUser.email,
+            receiverId: targetUser.uid,
           );
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -86,9 +86,9 @@ class FriendshipActionButton extends StatelessWidget {
           }
         } catch (e) {
           if (context.mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text("Error sending friend request: $e")));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text("Error sending friend request: $e")),
+            );
           }
         }
       },

@@ -177,17 +177,50 @@ class ChatService {
   }
 
   // Recall mesage
+  // Recall message và cập nhật lại lastMessage của phòng chat nếu cần
   Future<void> recallMessage({
     required String roomId,
     required String messageId,
   }) async {
-    await _db.child('chats').child(roomId).child(messageId).update({
-      'isDeleted': true,
-      'text': '',
-      'mediaUrl': null,
-      'fileName': null,
-      'fileSize': null,
-      'reactions': null,
-    });
+    // 1. Lấy thông tin tin nhắn hiện tại để biết timestamp của nó
+    final msgSnapshot = await _db
+        .child('chats')
+        .child(roomId)
+        .child(messageId)
+        .get();
+    if (!msgSnapshot.exists) return;
+
+    final msgData = Map<dynamic, dynamic>.from(msgSnapshot.value as Map);
+    final int msgTimestamp = msgData['timestamp'] ?? 0;
+
+    // 2. Lấy lastTimestamp hiện tại của phòng chat để so sánh
+    final roomSnapshot = await _db
+        .child('chat_rooms')
+        .child(roomId)
+        .child('lastTimestamp')
+        .get();
+    int lastRoomTimestamp = 0;
+    if (roomSnapshot.exists) {
+      lastRoomTimestamp = (roomSnapshot.value as num).toInt();
+    }
+
+    // 3. Tạo map để cập nhật đồng thời nhiều vị trí (Multi-path update)
+    final Map<String, dynamic> updates = {};
+
+    // Cập nhật trạng thái thu hồi trong node chats
+    updates['/chats/$roomId/$messageId/isDeleted'] = true;
+    updates['/chats/$roomId/$messageId/text'] = '';
+    updates['/chats/$roomId/$messageId/mediaUrl'] = null;
+    updates['/chats/$roomId/$messageId/fileName'] = null;
+    updates['/chats/$roomId/$messageId/fileSize'] = null;
+    updates['/chats/$roomId/$messageId/reactions'] = null;
+
+    // 4. KIỂM TRA: Nếu tin nhắn bị thu hồi CHÍNH LÀ tin nhắn mới nhất
+    if (msgTimestamp == lastRoomTimestamp) {
+      updates['/chat_rooms/$roomId/lastMessage'] = 'Tin nhắn đã bị thu hồi';
+    }
+
+    // Thực hiện cập nhật bất đồng bộ đồng thời lên Firebase
+    await _db.update(updates);
   }
 }

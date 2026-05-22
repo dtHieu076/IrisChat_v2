@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:irischat/providers/chat_provider.dart';
 import 'package:irischat/providers/user_provider.dart';
+import 'package:irischat/providers/call_provider.dart';
 import 'package:provider/provider.dart';
 
 import 'firebase_options.dart';
@@ -26,12 +27,10 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
-
         ChangeNotifierProvider(create: (_) => FriendshipProvider()),
-
         ChangeNotifierProvider(create: (_) => ChatProvider()),
-
         ChangeNotifierProvider(create: (_) => UserProvider()),
+        ChangeNotifierProvider(create: (_) => CallProvider()),
       ],
       child: Consumer<AuthProvider>(
         builder: (context, authProvider, child) {

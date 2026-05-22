@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:irischat/models/chat_room_model.dart';
 import 'package:irischat/models/user_model.dart';
+import 'package:irischat/providers/user_provider.dart';
 import 'package:irischat/screens/home/widget/friendship_action_button.dart';
 import 'package:provider/provider.dart';
 
@@ -18,6 +19,7 @@ class FriendsTab extends StatefulWidget {
 class _FriendsTabState extends State<FriendsTab> {
   final TextEditingController searchController = TextEditingController();
   late FriendshipProvider friendshipProvider;
+  late UserProvider userProvider;
 
   @override
   void initState() {
@@ -25,6 +27,7 @@ class _FriendsTabState extends State<FriendsTab> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       friendshipProvider = context.read<FriendshipProvider>();
+      userProvider = context.read<UserProvider>();
 
       friendshipProvider.listenReceivedRequests(widget.currentUser.uid);
       friendshipProvider.listenSentRequests(widget.currentUser.uid);
@@ -50,6 +53,7 @@ class _FriendsTabState extends State<FriendsTab> {
 
   @override
   Widget build(BuildContext context) {
+    final watchedUserProvider = context.watch<UserProvider>();
     return Consumer<FriendshipProvider>(
       builder: (context, friendshipProvider, child) {
         return DefaultTabController(
@@ -111,11 +115,11 @@ class _FriendsTabState extends State<FriendsTab> {
                           'Received (${friendshipProvider.receivedRequests.length})',
                     ),
                     Tab(
-                      text:
-                          'Sent (${friendshipProvider.sentRequests.length})',
+                      text: 'Sent (${friendshipProvider.sentRequests.length})',
                     ),
                     Tab(
-                      text: 'Friends (${friendshipProvider.friendsList.length})',
+                      text:
+                          'Friends (${friendshipProvider.friendsList.length})',
                     ),
                   ],
                 ),
@@ -126,7 +130,7 @@ class _FriendsTabState extends State<FriendsTab> {
                   child: TabBarView(
                     children: [
                       _buildReceivedTab(friendshipProvider),
-                      _buildSentTab(friendshipProvider),
+                      _buildSentTab(friendshipProvider, watchedUserProvider),
                       _buildFriendsTab(friendshipProvider),
                     ],
                   ),
@@ -259,18 +263,17 @@ class _FriendsTabState extends State<FriendsTab> {
     );
   }
 
-  Widget _buildSentTab(FriendshipProvider provider) {
+  Widget _buildSentTab(FriendshipProvider provider, UserProvider uProvider) {
     if (provider.sentRequests.isEmpty) {
       return const Center(child: Text("No sent requests"));
     }
-
     return ListView.builder(
       itemCount: provider.sentRequests.length,
       itemBuilder: (context, index) {
         final req = provider.sentRequests[index];
-
+        final displayName = uProvider.getDisplayNameFromCache(req.receiverId);
         return ListTile(
-          title: Text(req.receiverId),
+          title: Text(displayName),
           subtitle: const Text("Pending"),
           trailing: TextButton(
             onPressed: () => provider.cancelRequest(req.requestId),
@@ -364,7 +367,9 @@ class _FriendsTabState extends State<FriendsTab> {
 
                     if (name.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Please enter a group name")),
+                        const SnackBar(
+                          content: Text("Please enter a group name"),
+                        ),
                       );
                       return;
                     }

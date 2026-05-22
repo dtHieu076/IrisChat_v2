@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:irischat/models/chat_room_model.dart';
+import 'package:irischat/models/friend_model.dart';
 import 'package:irischat/models/message_model.dart';
 import 'package:irischat/models/user_model.dart';
+import 'package:irischat/providers/friendship_provider.dart';
 import 'package:irischat/providers/user_provider.dart';
 import 'package:irischat/screens/chat/widget/ChatAppBarWidget.dart';
 import 'package:irischat/screens/chat/widget/ChatInputWidget.dart';
 import 'package:irischat/screens/chat/widget/ChatSendingIndecatorWidget.dart';
+import 'package:irischat/screens/chat/widget/ForwardBottomSheet.dart';
 import 'package:irischat/screens/chat/widget/NotFriendWarningWidget.dart';
+import 'package:irischat/screens/chat/widget/ChatMessageListWidget.dart'; // Import file mới bóc tách
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -24,6 +28,7 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
   String? currentUid;
@@ -31,6 +36,12 @@ class _ChatScreenState extends State<ChatScreen> {
   final Map<String, UserModel> users = {};
 
   MessageModel? _replyingMessage;
+  String? _highlightedMessageId; // Quản lý ID tin nhắn gốc cần nhấp nháy
+
+  bool _isSearchBarVisible = false; // Ẩn/hiện thanh nhập từ khóa ở đỉnh
+  List<MessageModel> _searchResults = []; // Danh sách tin nhắn khớp từ khóa
+  int _currentSearchIndex =
+      -1; // Chỉ số tin nhắn đang tập trung (-1 là chưa chọn)
 
   @override
   void initState() {
@@ -44,13 +55,11 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
-      // Vào phòng chat
       context.read<ChatProvider>().enterChatRoom(
         roomId: widget.room.roomId,
         currentUid: currentUid!,
       );
 
-      // Tải thông tin các thành viên một lần duy nhất tại initState
       final userProvider = context.read<UserProvider>();
       for (final uid in widget.room.participants) {
         if (uid == currentUid) continue;
@@ -61,7 +70,6 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
 
-      // THỐNG NHẤT: Xác định privateFriend ngay sau khi fetch xong data
       if (!widget.room.isGroup) {
         final friendUid = widget.room.participants.firstWhere(
           (id) => id != currentUid,
@@ -86,6 +94,102 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
+  void _onSearchChanged(String keyword) {
+    if (keyword.trim().isEmpty) {
+      setState(() {
+        _searchResults.clear();
+        _currentSearchIndex = -1;
+        _highlightedMessageId = null;
+      });
+      return;
+    }
+
+    final chatProvider = context.read<ChatProvider>();
+
+    // Lọc danh sách tin nhắn: Thỏa mãn chứa keyword, không bị xóa, và là tin nhắn text
+    final matches = chatProvider.messages.where((msg) {
+      final isText = msg.type == 'text' || msg.type == null;
+      return isText &&
+          !msg.isDeleted &&
+          msg.text.toLowerCase().contains(keyword.trim().toLowerCase());
+    }).toList();
+
+    setState(() {
+      _searchResults = matches;
+      if (_searchResults.isNotEmpty) {
+        // Mặc định nhảy tới tin nhắn mới nhất khớp kết quả (nằm ở cuối mảng matches)
+        _currentSearchIndex = _searchResults.length - 1;
+        _jumpToSearchMatch(_currentSearchIndex);
+      } else {
+        _currentSearchIndex = -1;
+        _highlightedMessageId = null;
+      }
+    });
+  }
+
+  // Điều hướng qua lại giữa các kết quả (Mũi tên lên/xuống)
+  void _navigateSearch(bool goUp) {
+    if (_searchResults.isEmpty) return;
+
+    setState(() {
+      if (goUp) {
+        // Lên trên = tìm tin cũ hơn = giảm index trong mảng kết quả
+        if (_currentSearchIndex > 0) {
+          _currentSearchIndex--;
+        } else {
+          _currentSearchIndex =
+              _searchResults.length - 1; // Vòng lặp lại tin mới nhất
+        }
+      } else {
+        // Xuống dưới = tìm tin mới hơn = tăng index trong mảng kết quả
+        if (_currentSearchIndex < _searchResults.length - 1) {
+          _currentSearchIndex++;
+        } else {
+          _currentSearchIndex = 0; // Vòng lặp lại tin cũ nhất
+        }
+      }
+      _jumpToSearchMatch(_currentSearchIndex);
+    });
+  }
+
+  // Thực hiện cuộn màn hình và highlight tin nhắn được chọn
+  void _jumpToSearchMatch(int searchIndex) {
+    if (searchIndex < 0 || searchIndex >= _searchResults.length) return;
+
+    final targetMessage = _searchResults[searchIndex];
+    final chatProvider = context.read<ChatProvider>();
+
+    if (chatProvider.messageIndexMap.containsKey(targetMessage.messageId)) {
+      final int rawIndex =
+          chatProvider.messageIndexMap[targetMessage.messageId]!;
+      final int uiIndex = chatProvider.messages.length - 1 - rawIndex;
+
+      final double estimatedOffset = uiIndex * 90.0;
+      _scrollController.animateTo(
+        estimatedOffset,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+
+      // Gán ID để Widget con tô màu vàng cố định (không dùng bộ Timer tự tắt nữa)
+      _highlightedMessageId = targetMessage.messageId;
+    }
+  }
+
+  // Tắt chế độ tìm kiếm, dọn dẹp bộ nhớ tạm
+  void _closeSearchMode() {
+    setState(() {
+      _isSearchBarVisible = false;
+      _searchController.clear();
+      _searchResults.clear();
+      _currentSearchIndex = -1;
+      _highlightedMessageId = null;
+    });
+  }
+
+  // ===========================================================================
+  // CÁC HÀM LOGIC XỬ LÝ SỰ KIỆN GIỮ LẠI Ở FILE MẸ
+  // ===========================================================================
   void _onSendMessage() {
     final text = _messageController.text.trim();
     if (text.isEmpty || currentUid == null) return;
@@ -103,10 +207,7 @@ class _ChatScreenState extends State<ChatScreen> {
             : (_replyingMessage!.type == 'image' ? '[Image]' : '[File]'),
         replySenderId: _replyingMessage!.senderId,
       );
-
-      setState(() {
-        _replyingMessage = null;
-      });
+      setState(() => _replyingMessage = null);
     } else {
       chatProvider.sendTextMessage(
         roomId: widget.room.roomId,
@@ -114,106 +215,33 @@ class _ChatScreenState extends State<ChatScreen> {
         text: text,
       );
     }
-
     _messageController.clear();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final user = context.watch<AuthProvider>().user;
-    if (user == null || currentUid == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
+  void _onReplyMessageTap(MessageModel message) {
+    final targetMsgId = message.replyToMessageId;
+    if (targetMsgId == null) return;
 
-    return Scaffold(
-      appBar: ChatAppBarWidget(
-        room: widget.room,
-        privateFriend: privateFriend,
-        onSearchPressed:
-            _showSearchDialog, // Pass the search dialog function to the AppBar widget
-      ),
+    final chatProvider = context.read<ChatProvider>();
+    if (chatProvider.messageIndexMap.containsKey(targetMsgId)) {
+      final int rawIndex = chatProvider.messageIndexMap[targetMsgId]!;
+      final int uiIndex = chatProvider.messages.length - 1 - rawIndex;
 
-      body: Column(
-        children: [
-          NotFriendWarningWidget(
-            room: widget.room,
-            privateFriend: privateFriend,
-          ),
-          Expanded(child: _buildMessageList()),
-          ChatSendingIndicatorWidget(),
-          ChatInputWidget(
-            controller: _messageController,
-            replyingMessage: _replyingMessage,
-            onSendPressed: _onSendMessage,
-            onPickImage: () => _pickAndSendMedia('image'),
-            onPickFile: () => _pickAndSendMedia('file'),
-            onCancelReply: () => setState(() => _replyingMessage = null),
-          ),
-        ],
-      ),
-    );
-  }
+      _scrollController.animateTo(
+        uiIndex * 90.0,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
 
-  Widget _buildMessageList() {
-    return Consumer<ChatProvider>(
-      builder: (context, chatProvider, child) {
-        final messages = chatProvider.messages;
-
-        if (messages.isEmpty) {
-          return const Center(
-            child: Text(
-              'Say hello to start the conversation!',
-              style: TextStyle(color: Colors.grey),
-            ),
-          );
+      setState(() => _highlightedMessageId = targetMsgId);
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (mounted &&
+            _highlightedMessageId == targetMsgId &&
+            !_isSearchBarVisible) {
+          setState(() => _highlightedMessageId = null);
         }
-
-        return ListView.builder(
-          controller: _scrollController,
-          padding: const EdgeInsets.all(16),
-          reverse: true,
-          itemCount: messages.length,
-          itemBuilder: (context, index) {
-            final message = messages[messages.length - 1 - index];
-            final isMe = message.senderId == currentUid;
-            final sender = users[message.senderId];
-
-            // Logic tính toán DateSeparator được giữ lại ở đây vì nó phụ thuộc vào vị trí phần tử index
-            bool showDateSeparator = false;
-            if (index == messages.length - 1) {
-              showDateSeparator = true;
-            } else {
-              final previousMessage =
-                  messages[messages.length - 1 - (index + 1)];
-              final currentDate = DateTime.fromMillisecondsSinceEpoch(
-                message.timestamp,
-              );
-              final previousDate = DateTime.fromMillisecondsSinceEpoch(
-                previousMessage.timestamp,
-              );
-
-              showDateSeparator =
-                  currentDate.day != previousDate.day ||
-                  currentDate.month != previousDate.month ||
-                  currentDate.year != previousDate.year;
-            }
-
-            return GestureDetector(
-              onLongPress: message.isDeleted
-                  ? null
-                  : () => _showMessageActions(message, isMe),
-              onDoubleTap: () => setState(() => _replyingMessage = message),
-              child: Column(
-                children: [
-                  if (showDateSeparator) _buildDateSeparator(message.timestamp),
-                  _buildMessageBubble(message, isMe, sender),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
+      });
+    }
   }
 
   void _showSearchDialog() {
@@ -256,9 +284,6 @@ class _ChatScreenState extends State<ChatScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // =========================
-              // REACTION BAR
-              // =========================
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -279,12 +304,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 20),
-
-              // =========================
-              // ACTIONS
-              // =========================
               Wrap(
                 spacing: 20,
                 runSpacing: 20,
@@ -294,29 +314,50 @@ class _ChatScreenState extends State<ChatScreen> {
                     label: 'Reply',
                     onTap: () {
                       Navigator.pop(context);
-
                       setState(() {
                         _replyingMessage = message;
                       });
                     },
                   ),
-
                   _actionButton(
                     icon: Icons.copy,
                     label: 'Copy',
-                    onTap: () {
-                      Navigator.pop(context);
-                    },
+                    onTap: () => Navigator.pop(context),
                   ),
-
                   _actionButton(
-                    icon: Icons.share,
-                    label: 'Share',
+                    icon: Icons.forward, // Hoặc Icons.share
+                    label: 'Forward',
                     onTap: () {
+                      // 1. Đóng menu hành động tin nhắn hiện tại trước
                       Navigator.pop(context);
+
+                      // 2. Lấy UID của bạn (ví dụ lấy từ widget.currentUid hoặc từ Provider tùy cấu trúc app)
+                      final myUid = widget.room.participants.firstWhere(
+                        (id) =>
+                            id !=
+                            widget
+                                .room
+                                .roomName, // Chỉnh lại logic lấy UID của chính bạn tại đây
+                        orElse: () => '',
+                      );
+
+                      // 3. Hiển thị BottomSheet chứa widget vừa tách
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(20),
+                          ),
+                        ),
+                        builder: (context) => ForwardBottomSheet(
+                          originalMessage:
+                              message, // Đối tượng MessageModel của tin nhắn đang chọn
+                          currentUid: myUid,
+                        ),
+                      );
                     },
                   ),
-
                   if (isMe)
                     _actionButton(
                       icon: Icons.undo,
@@ -329,18 +370,14 @@ class _ChatScreenState extends State<ChatScreen> {
                         );
                       },
                     ),
-
                   if (isMe)
                     _actionButton(
                       icon: Icons.delete,
                       label: 'Delete',
-                      onTap: () {
-                        Navigator.pop(context);
-                      },
+                      onTap: () => Navigator.pop(context),
                     ),
                 ],
               ),
-
               const SizedBox(height: 20),
             ],
           ),
@@ -354,7 +391,6 @@ class _ChatScreenState extends State<ChatScreen> {
       borderRadius: BorderRadius.circular(30),
       onTap: () {
         Navigator.pop(context);
-
         context.read<ChatProvider>().toggleReaction(
           roomId: widget.room.roomId,
           messageId: message.messageId,
@@ -399,280 +435,6 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildDateSeparator(int timestamp) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        children: [
-          const Expanded(child: Divider()),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Text(
-              _formatDate(timestamp),
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          const Expanded(child: Divider()),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMessageBubble(
-    MessageModel message,
-    bool isMe,
-    UserModel? sender,
-  ) {
-    final bool isImageMessage =
-        message.type == 'image' && message.mediaUrl != null;
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Column(
-        crossAxisAlignment: isMe
-            ? CrossAxisAlignment.end
-            : CrossAxisAlignment.start,
-        children: [
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            padding: isImageMessage
-                ? EdgeInsets.zero
-                : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-
-            decoration: BoxDecoration(
-              color: isImageMessage
-                  ? Colors.white
-                  : (isMe ? Colors.blueAccent : Colors.grey.shade200),
-
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(16),
-                topRight: const Radius.circular(16),
-                bottomLeft: Radius.circular(isMe ? 16 : 0),
-                bottomRight: Radius.circular(isMe ? 0 : 16),
-              ),
-
-              boxShadow: isImageMessage
-                  ? [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1),
-                      ),
-                    ]
-                  : null,
-            ),
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.75,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (widget.room.isGroup)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      isMe ? 'You' : (sender?.displayName ?? 'User'),
-                      style: TextStyle(
-                        color: isMe ? Colors.white70 : Colors.black54,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                if (message.replyToMessageId != null)
-                  _buildReplyInBubble(message, isMe),
-                _buildMessageContent(message, isMe),
-                const SizedBox(height: 4),
-                _buildMessageStatusRow(message, isMe),
-              ],
-            ),
-          ),
-          if (message.reactions != null && message.reactions!.isNotEmpty)
-            _buildReactions(message, isMe),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildReplyInBubble(MessageModel message, bool isMe) {
-    final replySenderName = message.replySenderId == currentUid
-        ? 'You'
-        : (users[message.replySenderId]?.displayName ?? 'User');
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.all(6),
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: isMe
-            ? Colors.white.withOpacity(0.15)
-            : Colors.black.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            replySenderName,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 11,
-              color: isMe ? Colors.white : Colors.black87,
-            ),
-          ),
-          Text(
-            (message.replyText?.isNotEmpty == true)
-                ? message.replyText!
-                : '[Message unavailable]',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 12,
-              color: isMe ? Colors.white70 : Colors.black54,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMessageContent(MessageModel message, bool isMe) {
-    if (message.isDeleted) {
-      return Text(
-        isMe ? 'You recalled a message' : 'This message was recalled',
-        style: TextStyle(
-          color: isMe ? Colors.white70 : Colors.black45,
-          fontStyle: FontStyle.italic,
-        ),
-      );
-    } else if (message.type == 'image' && message.mediaUrl != null) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.network(
-              message.mediaUrl!,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.broken_image, size: 40),
-            ),
-          ),
-          if (message.text.isNotEmpty) _buildCaptionText(message.text, isMe),
-        ],
-      );
-    } else if (message.type == 'file') {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.insert_drive_file,
-                color: isMe ? Colors.white : Colors.blue,
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  message.fileName ?? 'File',
-                  style: TextStyle(
-                    color: isMe ? Colors.white : Colors.black87,
-                    decoration: TextDecoration.underline,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (message.text.isNotEmpty) _buildCaptionText(message.text, isMe),
-        ],
-      );
-    }
-
-    return Text(
-      message.text,
-      style: TextStyle(
-        color: isMe ? Colors.white : Colors.black87,
-        fontSize: 15,
-      ),
-    );
-  }
-
-  Widget _buildCaptionText(String text, bool isMe) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: isMe ? Colors.white : Colors.black87,
-          fontSize: 14,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMessageStatusRow(MessageModel message, bool isMe) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        Text(
-          _formatTime(message.timestamp),
-          style: TextStyle(
-            color: isMe ? Colors.white70 : Colors.black45,
-            fontSize: 10,
-          ),
-        ),
-        if (isMe) ...[
-          const SizedBox(width: 4),
-          Icon(
-            message.status == 'read' ? Icons.done_all : Icons.done,
-            size: 14,
-            color: message.status == 'read'
-                ? Colors.lightBlueAccent
-                : Colors.white70,
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildReactions(MessageModel message, bool isMe) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 10, right: 10, bottom: 4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 2,
-              offset: const Offset(0, 1),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: message.reactions!.values
-              .toSet()
-              .map(
-                (emoji) => Text(
-                  emoji.toString(),
-                  style: const TextStyle(fontSize: 12),
-                ),
-              )
-              .toList(),
-        ),
-      ),
-    );
-  }
-
   Future<void> _pickAndSendMedia(String type) async {
     final result = await FilePicker.platform.pickFiles(
       type: type == 'image' ? FileType.image : FileType.any,
@@ -692,13 +454,190 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  String _formatTime(int timestamp) {
-    final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
-    return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  // ===========================================================================
+  // BUILD METHOD CHÍNH
+  // ===========================================================================
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<AuthProvider>().user;
+    if (user == null || currentUid == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    return Scaffold(
+      appBar: ChatAppBarWidget(
+        room: widget.room,
+        privateFriend: privateFriend,
+        onSearchPressed: () =>
+            setState(() => _isSearchBarVisible = true), // Mở thanh tìm kiếm
+      ),
+      body: Column(
+        children: [
+          _buildTopSearchBar(), // ◄ Thanh gõ từ khóa ở đỉnh
+          NotFriendWarningWidget(
+            room: widget.room,
+            privateFriend: privateFriend,
+          ),
+
+          Expanded(
+            child: ChatMessageListWidget(
+              scrollController: _scrollController,
+              currentUid: currentUid!,
+              users: users,
+              room: widget.room,
+              highlightedMessageId: _highlightedMessageId,
+              onMessageLongPress: (message, isMe) =>
+                  _showMessageActions(message, isMe),
+              onMessageDoubleTap: (message) =>
+                  setState(() => _replyingMessage = message),
+              onReplyTap: _onReplyMessageTap,
+            ),
+          ),
+
+          ChatSendingIndicatorWidget(),
+          _buildBottomSearchNavigator(), // ◄ Thanh số lượng X/Y và nút Lên/Xuống
+          // CHỐNG CHẶN CHAT REALTIME
+          widget.room.isGroup
+              ? ChatInputWidget(
+                  controller: _messageController,
+                  replyingMessage: _replyingMessage,
+                  onSendPressed: _onSendMessage,
+                  onPickImage: () => _pickAndSendMedia('image'),
+                  onPickFile: () => _pickAndSendMedia('file'),
+                  onCancelReply: () => setState(() => _replyingMessage = null),
+                )
+              : StreamBuilder<FriendModel?>(
+                  stream: context
+                      .read<FriendshipProvider>()
+                      .listenFriendshipState(
+                        currentUid!,
+                        privateFriend?.uid ?? '',
+                      ),
+                  builder: (context, snapshot) {
+                    final friendData = snapshot.data;
+
+                    // Nếu trường 'blockedBy' trong DB không rỗng chứng tỏ cuộc hội thoại đang bị chặn
+                    if (friendData != null && friendData.blockedBy.isNotEmpty) {
+                      final bool amITheBlocker =
+                          friendData.blockedBy == currentUid;
+
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        color: Colors.grey.shade50,
+                        alignment: Alignment.center,
+                        child: Text(
+                          amITheBlocker
+                              ? 'You have blocked this user. Unblock to resume chat.'
+                              : 'This user has blocked you. You cannot reply to this conversation.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontStyle: FontStyle.italic,
+                            fontSize: 13,
+                          ),
+                        ),
+                      );
+                    }
+
+                    // Không có ai chặn -> Trả lại quyền gõ phím bình thường
+                    return ChatInputWidget(
+                      controller: _messageController,
+                      replyingMessage: _replyingMessage,
+                      onSendPressed: _onSendMessage,
+                      onPickImage: () => _pickAndSendMedia('image'),
+                      onPickFile: () => _pickAndSendMedia('file'),
+                      onCancelReply: () =>
+                          setState(() => _replyingMessage = null),
+                    );
+                  },
+                ),
+        ],
+      ),
+    );
   }
 
-  String _formatDate(int timestamp) {
-    final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
-    return '${date.day}/${date.month}/${date.year}';
+  // 1. Thanh nhập từ khóa (Nằm ngay dưới AppBar)
+  Widget _buildTopSearchBar() {
+    if (!_isSearchBarVisible) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      // Di chuyển color và border vào bên trong BoxDecoration
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.search, color: Colors.grey),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: _searchController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'Search message content...',
+                border: InputBorder.none,
+                isDense: true,
+              ),
+              onChanged: _onSearchChanged,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, color: Colors.grey),
+            onPressed: _closeSearchMode,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 2. Thanh hiển thị số lượng và nút bấm điều hướng (Nằm trên thanh Chat Input)
+  Widget _buildBottomSearchNavigator() {
+    if (!_isSearchBarVisible || _searchResults.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Hiển thị dạng thân thiện con người (Ví dụ: kết quả thứ 1/3 thay vì chỉ số mảng 0/3)
+    final int displayCurrent = _currentSearchIndex + 1;
+    final int displayTotal = _searchResults.length;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      // Đã sửa: Gom color và border vào đúng vị trí trong BoxDecoration
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        border: Border(top: BorderSide(color: Colors.grey.shade300)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Found matches: $displayCurrent/$displayTotal',
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+              fontSize: 13,
+            ),
+          ),
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.keyboard_arrow_up),
+                tooltip: 'Older message',
+                onPressed: () => _navigateSearch(true), // Đi lên trên
+              ),
+              IconButton(
+                icon: const Icon(Icons.keyboard_arrow_down),
+                tooltip: 'Newer message',
+                onPressed: () => _navigateSearch(false), // Đi xuống dưới
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }

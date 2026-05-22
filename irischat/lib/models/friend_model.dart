@@ -16,6 +16,12 @@ class FriendModel {
   });
 
   factory FriendModel.fromMap(Map<dynamic, dynamic> map) {
+    // Kiểm tra và ép kiểu an toàn cho trường isFavorite
+    List<String> favoriteList = [];
+    if (map['isFavorite'] is Iterable) {
+      favoriteList = List<String>.from(map['isFavorite']);
+    }
+
     return FriendModel(
       friendshipId: map['friendshipId'] ?? '',
       user1Id: map['user1Id'] ?? '',
@@ -24,7 +30,7 @@ class FriendModel {
           ? DateTime.parse(map['since'])
           : DateTime.now(),
       blockedBy: map['blockedBy'] ?? '',
-      isFavorite: List<String>.from(map['isFavorite'] ?? []),
+      isFavorite: favoriteList, // Đã an toàn tuyệt đối
     );
   }
 
@@ -38,4 +44,21 @@ class FriendModel {
       'isFavorite': isFavorite,
     };
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FriendModel &&
+          runtimeType == other.runtimeType &&
+          friendshipId == other.friendshipId &&
+          user1Id == other.user1Id &&
+          user2Id == other.user2Id &&
+          blockedBy == other.blockedBy;
+
+  @override
+  int get hashCode =>
+      friendshipId.hashCode ^
+      user1Id.hashCode ^
+      user2Id.hashCode ^
+      blockedBy.hashCode;
 }
