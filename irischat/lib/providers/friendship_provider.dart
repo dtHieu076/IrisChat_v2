@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:irischat/models/chat_room_model.dart';
+import 'package:irischat/models/friend_model.dart';
 
 import '../models/friendship_model.dart';
 import '../models/user_model.dart';
@@ -71,15 +72,10 @@ class FriendshipProvider extends ChangeNotifier {
   Future<void> sendFriendRequest({
     required String senderId,
     required String senderEmail,
-    required String receiverEmail, // Ở UI bạn đang truyền email
+    required String receiverId, // Sửa từ receiverEmail thành receiverId
   }) async {
     try {
-      if (_searchedUser == null || _searchedUser!.email != receiverEmail) {
-        throw Exception("Không tìm thấy ID người nhận hợp lệ");
-      }
-
-      final String receiverId = _searchedUser!.uid;
-
+      // Không cần check _searchedUser nữa vì ta đã có thẳng receiverId từ UI truyền vào
       final request = await _service.sendFriendRequest(
         senderId: senderId,
         senderEmail: senderEmail,
@@ -225,5 +221,27 @@ class FriendshipProvider extends ChangeNotifier {
     } catch (e) {
       print('[FriendshipProvider] Lỗi removeFriend: $e');
     }
+  }
+
+  Future<void> toggleBlock({
+    required String currentUid,
+    required String friendUid,
+    required bool shouldBlock,
+  }) async {
+    try {
+      await _service.toggleBlockUser(
+        currentUid: currentUid,
+        friendUid: friendUid,
+        shouldBlock: shouldBlock,
+      );
+      // Thông thường Firebase Realtime Stream sẽ tự cập nhật UI, không cần notifyListeners() thủ công ở đây
+    } catch (e) {
+      debugPrint("[FriendshipProvider] Error toggleBlock: $e");
+    }
+  }
+
+  // 2. Phương thức lắng nghe trạng thái dữ liệu Block Realtime phục vụ ẩn/hiện Chat Input
+  Stream<FriendModel?> listenFriendshipState(String uid1, String uid2) {
+    return _service.listenFriendship(uid1, uid2);
   }
 }

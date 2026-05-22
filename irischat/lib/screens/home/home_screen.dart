@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:irischat/models/call_model.dart';
 import 'package:irischat/models/user_model.dart';
+import 'package:irischat/providers/call_provider.dart';
 import 'package:irischat/providers/chat_provider.dart';
+import 'package:irischat/screens/call/call_screen.dart';
 import 'package:provider/provider.dart';
-
+import 'dart:async';
 import '../../providers/auth_provider.dart';
 import '../../providers/friendship_provider.dart';
 
@@ -23,6 +26,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late AuthProvider authProvider;
   late FriendshipProvider friendshipProvider;
   late ChatProvider chatProvider;
+  StreamSubscription<CallModel>? _callSubscription;
 
   @override
   void initState() {
@@ -42,7 +46,79 @@ class _HomeScreenState extends State<HomeScreen> {
       friendshipProvider.listenSentRequests(user.uid);
       friendshipProvider.listenFriends(user.uid);
       chatProvider.listenAllChatRooms(user.uid);
+
+      // 🔥 LẮNG NGHE QUA PROVIDER (Đúng chuẩn kiến trúc)
+      // _listenToIncomingCalls(user.uid);
     }
+  }
+
+  void _listenToIncomingCalls(String uid) {
+    _callSubscription = context
+        .read<CallProvider>()
+        .incomingCallStream(uid)
+        .listen((call) async {
+          if (call.status == 'ringing' && call.receiverId == uid) {
+            _showIncomingCallDialog(call);
+          }
+
+          if (call.status == 'accepted') {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            }
+            await context.read<CallProvider>().getService().initRenderers();
+            if (mounted) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => CallScreen()),
+              );
+            }
+          }
+
+          // 🔥 KHI NHẬN ĐƯỢC TÍN HIỆU 'ended' TỪ ĐỐI PHƯƠNG
+          if (call.status == 'ended') {
+            // Máy còn lại cũng tự gọi Provider để dọn dẹp cam/mic của mình
+            await context.read<CallProvider>().endCall();
+
+            // Nếu đang ở trong màn hình CallScreen thì lùi ra ngoài
+            if (mounted && Navigator.canPop(context)) {
+              Navigator.pop(context);
+            }
+          }
+        });
+  }
+
+  void _showIncomingCallDialog(CallModel call) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return AlertDialog(
+          title: const Text('Cuộc gọi đến'),
+          content: Text('Người gọi: ${call.callerId}'),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                // Người nhận bấm nút này CHỈ làm 1 nhiệm vụ duy nhất:
+                // Báo lên Firebase là tôi đã đồng ý nhận cuộc gọi.
+                // Việc chuyển màn hình sẽ do hàm "_listenToIncomingCalls" ở trên lo liệu tự động.
+                await context.read<CallProvider>().acceptCall(call.callId);
+              },
+              child: const Text(
+                'Chấp nhận',
+                style: TextStyle(color: Colors.green),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    // 🔥 QUAN TRỌNG: Hủy lắng nghe cuộc gọi khi màn hình này bị đóng
+    _callSubscription?.cancel();
+    super.dispose();
   }
 
   @override

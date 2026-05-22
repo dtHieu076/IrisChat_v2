@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'dart:typed_data';
-
-import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 
 import '../models/chat_room_model.dart';
@@ -11,9 +9,7 @@ import '../services/chat_service.dart';
 class ChatProvider extends ChangeNotifier {
   final ChatService _chatService = ChatService();
 
-  // ===========================================================================
-  // STATE - DANH SÁCH PHÒNG CHAT
-  // ===========================================================================
+  // STATE - Chat rooms list
   List<ChatRoomModel> _chatRooms = [];
   List<ChatRoomModel> get chatRooms => _chatRooms;
 
@@ -27,21 +23,16 @@ class ChatProvider extends ChangeNotifier {
     return chatRooms.any((room) => (room.unreadCount[_currentUid] ?? 0) > 0);
   }
 
-  // ===========================================================================
-  // STATE - TIN NHẮN TRONG PHÒNG
-  // ===========================================================================
+  // STATE - Messages list in chat room
   List<MessageModel> _messages = [];
   List<MessageModel> get messages => _messages;
+  final Map<String, int> _messageIndexMap = {};
+  Map<String, int> get messageIndexMap => _messageIndexMap;
 
-  // ===========================================================================
-  // STATE UI
-  // ===========================================================================
   bool _isSending = false;
   bool get isSending => _isSending;
 
-  // ===========================================================================
-  // ROOM ĐANG MỞ
-  // ===========================================================================
+  // STATE - Current chat room ID
   String? _currentRoomId;
   String? get currentRoomId => _currentRoomId;
 
@@ -52,9 +43,15 @@ class ChatProvider extends ChangeNotifier {
 
   StreamSubscription<List<MessageModel>>? _messagesSubscription;
 
-  // ===========================================================================
-  // LẮNG NGHE DANH SÁCH PHÒNG CHAT
-  // ===========================================================================
+  void _rebuildMessageIndexMap() {
+    _messageIndexMap.clear();
+
+    for (int i = 0; i < _messages.length; i++) {
+      _messageIndexMap[_messages[i].messageId] = i;
+    }
+  }
+
+  // listen chat rooms realtime
   void listenAllChatRooms(String currentUid) {
     _roomsSubscription?.cancel();
     _roomsSubscription = _chatService.listenChatRooms(currentUid).listen((
@@ -65,9 +62,7 @@ class ChatProvider extends ChangeNotifier {
     });
   }
 
-  // ===========================================================================
-  // VÀO PHÒNG CHAT
-  // ===========================================================================
+  // enter chat room
   void enterChatRoom({required String roomId, required String currentUid}) {
     _currentRoomId = roomId;
 
@@ -82,7 +77,7 @@ class ChatProvider extends ChangeNotifier {
       msgList,
     ) async {
       _messages = msgList;
-
+      _rebuildMessageIndexMap();
       notifyListeners();
 
       // Reset unread liên tục khi đang mở phòng
@@ -229,6 +224,31 @@ class ChatProvider extends ChangeNotifier {
       replyText: replyText,
       replySenderId: replySenderId,
     );
+  }
+
+  // PUBLIC: CHUYỂN TIẾP TIN NHẮN ĐƠN GIẢN (FORWARD SIMPLE)
+  // ===========================================================================
+  Future<void> forwardMessageSimple({
+    required MessageModel originalMessage, // Tin nhắn gốc cần chuyển tiếp
+    required List<String> targetRoomIds, // Danh sách ID các phòng chat nhận tin
+    required String currentUid, // UID của chính bạn (người gửi)
+  }) async {
+    if (targetRoomIds.isEmpty) return;
+
+    // Vòng lặp gửi tin nhắn này qua từng phòng chat đích
+    for (final roomId in targetRoomIds) {
+      await _sendCoreMessage(
+        roomId: roomId,
+        currentUid: currentUid,
+        type: originalMessage.type,
+        text: originalMessage.text,
+        mediaUrl: originalMessage.mediaUrl,
+        fileName: originalMessage.fileName,
+        fileSize: originalMessage.fileSize,
+        // Không truyền các trường replyToMessageId, replyText, replySenderId
+        // để tin nhắn trở thành một tin nhắn độc lập hoàn toàn mới
+      );
+    }
   }
 
   // ===========================================================================

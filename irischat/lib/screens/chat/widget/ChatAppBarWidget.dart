@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:irischat/models/chat_room_model.dart';
 import 'package:irischat/models/user_model.dart';
+import 'package:irischat/providers/auth_provider.dart';
+import 'package:irischat/providers/call_provider.dart';
+import 'package:provider/provider.dart';
 
 class ChatAppBarWidget extends StatelessWidget implements PreferredSizeWidget {
   final ChatRoomModel room;
@@ -35,7 +38,18 @@ class ChatAppBarWidget extends StatelessWidget implements PreferredSizeWidget {
 
       actions: [
         IconButton(icon: const Icon(Icons.search), onPressed: onSearchPressed),
+        IconButton(
+          icon: const Icon(Icons.call),
+          onPressed: () async {
+            final currentUid = context.read<AuthProvider>().user!.uid;
+            final callProvider = context.read<CallProvider>();
 
+            await callProvider.startCall(
+              callerId: currentUid,
+              receiverId: privateFriend!.uid,
+            );
+          },
+        ),
         IconButton(
           icon: const Icon(Icons.more_vert),
           onPressed: () {

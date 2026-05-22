@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:irischat/providers/user_provider.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/chat_room_model.dart';
@@ -8,6 +7,7 @@ import '../../../models/user_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/chat_provider.dart';
 import '../../../providers/friendship_provider.dart';
+import '../../../providers/user_provider.dart';
 
 import '../../../routes/app_routes.dart';
 
@@ -34,6 +34,7 @@ class _HomeTabState extends State<HomeTab> {
 
     final uid = user.uid;
 
+    // Kích hoạt lắng nghe dữ liệu realtime
     context.read<ChatProvider>().listenAllChatRooms(uid);
     context.read<FriendshipProvider>().listenFriends(uid);
 
@@ -49,7 +50,6 @@ class _HomeTabState extends State<HomeTab> {
     }
 
     final currentUid = currentUser.uid;
-
     final friendsList = context.watch<FriendshipProvider>().friendsList;
 
     return Scaffold(
@@ -57,115 +57,22 @@ class _HomeTabState extends State<HomeTab> {
         builder: (context, chatProvider, child) {
           final rooms = chatProvider.chatRooms;
 
-          // ========================= EMPTY STATE =========================
+          // 1. GIAO DIỆN TRỐNG (EMPTY STATE)
           if (rooms.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.chat_bubble_outline,
-                    size: 64,
-                    color: Colors.grey.shade400,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Chưa có cuộc hội thoại nào',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Hãy sang tab Bạn bè để bắt đầu trò chuyện!',
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                  ),
-                ],
-              ),
-            );
+            return _buildEmptyState();
           }
 
-          // ========================= CHAT LIST =========================
+          // 2. DANH SÁCH PHÒNG CHAT (CHAT LIST)
           return ListView.separated(
             padding: const EdgeInsets.symmetric(vertical: 8),
             itemCount: rooms.length,
             separatorBuilder: (_, __) => const Divider(height: 1, indent: 76),
             itemBuilder: (context, index) {
-              final ChatRoomModel room = rooms[index];
-              final isGroup = room.isGroup;
-
-              // 1. Nếu là nhóm chat -> Hiển thị luôn
-              if (isGroup) {
-                return _buildChatTile(
-                  context: context,
-                  room: room,
-                  displayName: room.roomName,
-                  avatarUrl: room.roomAvatar,
-                  currentUid: currentUid,
-                  friendInfo: null,
-                );
-              }
-
-              // 2. Nếu là chat 1-1, tìm UID đối phương
-              final friendUid = room.participants.firstWhere(
-                (id) => id != currentUid,
-                orElse: () => '',
-              );
-
-              // 3. Khớp từ danh sách bạn bè đang có sẵn trong máy (Realtime)
-              final friendInList = friendsList.any((f) => f.uid == friendUid)
-                  ? friendsList.firstWhere((f) => f.uid == friendUid)
-                  : null;
-
-              if (friendInList != null) {
-                return _buildChatTile(
-                  context: context,
-                  room: room,
-                  displayName: friendInList.displayName,
-                  avatarUrl: friendInList.avatarUrl,
-                  currentUid: currentUid,
-                  friendInfo: friendInList,
-                );
-              }
-
-              // 4. ĐÚNG CHUẨN KIẾN TRÚC: Gọi thông qua UserProvider
-              return FutureBuilder<UserModel?>(
-                future: context.read<UserProvider>().fetchUserById(friendUid),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const SizedBox(
-                      height: 72,
-                      child: Center(
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                    );
-                  }
-
-                  // Nếu tìm thấy thông tin user lạ thông qua Provider
-                  if (snapshot.hasData && snapshot.data != null) {
-                    final strangerUser = snapshot.data!;
-                    return _buildChatTile(
-                      context: context,
-                      room: room,
-                      displayName: strangerUser.displayName,
-                      avatarUrl: strangerUser.avatarUrl,
-                      currentUid: currentUid,
-                      friendInfo: strangerUser,
-                    );
-                  }
-
-                  // Backup phòng hờ nếu user đó lỗi hoặc xóa tài khoản
-                  return _buildChatTile(
-                    context: context,
-                    room: room,
-                    displayName: 'Người dùng IrisChat',
-                    avatarUrl: '',
-                    currentUid: currentUid,
-                    friendInfo: null,
-                  );
-                },
+              return _buildChatRoomLoader(
+                context: context,
+                room: rooms[index],
+                currentUid: currentUid,
+                friendsList: friendsList,
               );
             },
           );
@@ -174,17 +81,140 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  // Hàm phụ giúp render ô chat dễ dàng hơn, tránh lặp lại code giao diện
+  // ===========================================================================
+  // HÀM 1: GIAO DIỆN KHI CHƯA CÓ CUỘC HỘI THOẠI NÀO
+  // ===========================================================================
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.chat_bubble_outline,
+            size: 64,
+            color: Colors.grey.shade400,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Chưa có cuộc hội thoại nào',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Hãy sang tab Bạn bè để bắt đầu trò chuyện!',
+            style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // HÀM 2: BỘ PHÂN LOẠI & TẢI DỮ LIỆU PHÒNG CHAT (Group / Bạn bè / Người lạ)
+  // ===========================================================================
+  Widget _buildChatRoomLoader({
+    required BuildContext context,
+    required ChatRoomModel room,
+    required String currentUid,
+    required List<UserModel> friendsList,
+  }) {
+    // TH1: Nếu là nhóm chat -> Render luôn không cần check Friend list
+    if (room.isGroup) {
+      return _buildChatTile(
+        context: context,
+        room: room,
+        displayName: room.roomName,
+        avatarUrl: room.roomAvatar,
+        currentUid: currentUid,
+      );
+    }
+
+    // TH2: Chat 1-1 -> Tìm UID đối phương
+    final friendUid = room.participants.firstWhere(
+      (id) => id != currentUid,
+      orElse: () => '',
+    );
+
+    // Khớp thông tin từ danh sách bạn bè đã cache ở local máy (Realtime)
+    final friendInList = friendsList.any((f) => f.uid == friendUid)
+        ? friendsList.firstWhere((f) => f.uid == friendUid)
+        : null;
+
+    if (friendInList != null) {
+      return _buildChatTile(
+        context: context,
+        room: room,
+        displayName: friendInList.displayName,
+        avatarUrl: friendInList.avatarUrl,
+        currentUid: currentUid,
+      );
+    }
+
+    // TH3: Chat với người lạ -> Dùng FutureBuilder gọi qua UserProvider để lấy data từ Firebase
+    return FutureBuilder<UserModel?>(
+      future: context.read<UserProvider>().fetchUserById(friendUid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            height: 72,
+            child: Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          );
+        }
+
+        if (snapshot.hasData && snapshot.data != null) {
+          final strangerUser = snapshot.data!;
+          return _buildChatTile(
+            context: context,
+            room: room,
+            displayName: strangerUser.displayName,
+            avatarUrl: strangerUser.avatarUrl,
+            currentUid: currentUid,
+          );
+        }
+
+        // Dự phòng nếu tài khoản đối phương bị lỗi hoặc bị xóa
+        return _buildChatTile(
+          context: context,
+          room: room,
+          displayName: 'Người dùng IrisChat',
+          avatarUrl: '',
+          currentUid: currentUid,
+        );
+      },
+    );
+  }
+
+  // ===========================================================================
+  // HÀM 3: RENDER Ô CHAT CHI TIẾT (LIST TILE)
+  // ===========================================================================
   Widget _buildChatTile({
     required BuildContext context,
     required ChatRoomModel room,
     required String displayName,
     required String avatarUrl,
     required String currentUid,
-    required UserModel? friendInfo,
   }) {
     final unreadCount = room.unreadCount[currentUid] ?? 0;
     final hasUnread = unreadCount > 0;
+    final isRecalled = room.lastMessage == 'Tin nhắn đã bị thu hồi';
+
+    // Logic gán chữ hiển thị tin nhắn cuối cùng dựa trên trạng thái thu hồi
+    String finalSubtitleText = '';
+    if (isRecalled) {
+      finalSubtitleText = room.lastSenderId == currentUid
+          ? 'Bạn đã thu hồi một tin nhắn'
+          : 'Tin nhắn đã bị thu hồi';
+    } else {
+      finalSubtitleText = room.lastSenderId == currentUid
+          ? 'Bạn: ${room.lastMessage}'
+          : room.lastMessage;
+    }
 
     return ListTile(
       onTap: () {
@@ -215,20 +245,21 @@ class _HomeTabState extends State<HomeTab> {
       subtitle: Padding(
         padding: const EdgeInsets.only(top: 4),
         child: Text(
-          room.lastSenderId == currentUid
-              ? 'Bạn: ${room.lastMessage}'
-              : room.lastMessage,
+          finalSubtitleText,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontSize: 14,
-            color: hasUnread ? Colors.black87 : Colors.grey.shade600,
+            color: isRecalled
+                ? Colors.grey.shade400
+                : (hasUnread ? Colors.black87 : Colors.grey.shade600),
             fontWeight: hasUnread ? FontWeight.bold : FontWeight.normal,
+            fontStyle: isRecalled ? FontStyle.italic : FontStyle.normal,
           ),
         ),
       ),
       trailing: SizedBox(
-        width: 60,
+        width: 65,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -265,7 +296,9 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  // ========================= FORMAT TIME =========================
+  // ===========================================================================
+  // HÀM 4: ĐỊNH DẠNG THỜI GIAN HIỂN THỊ
+  // ===========================================================================
   String _formatTimestamp(int timestamp) {
     if (timestamp == 0) return '';
 

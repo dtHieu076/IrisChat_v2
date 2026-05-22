@@ -12,9 +12,34 @@ class UserProvider extends ChangeNotifier {
 
   UserModel? getUserById(String uid) => _cache[uid];
 
+  // --- HÀM MỚI SỬA ĐỔI: Lấy String trực tiếp đồng bộ từ Cache ---
+  String getDisplayNameFromCache(String uid) {
+    if (_cache.containsKey(uid)) {
+      return _cache[uid]!.displayName;
+    }
+
+    // Nếu chưa có trong cache, kích hoạt hàm tải ngầm dữ liệu cho lần sau
+    _preloadUser(uid);
+
+    return 'Loading...'; // Trả về text tạm thời, không làm treo UI
+  }
+
+  // Hàm chạy ngầm tải dữ liệu từ server và nạp vào cache
+  Future<void> _preloadUser(String uid) async {
+    try {
+      // Tránh việc gọi API trùng lặp nếu đang có request xử lý (tùy chọn)
+      final user = await _userService.getUserById(uid);
+      if (user != null) {
+        _cache[uid] = user;
+        notifyListeners(); // Báo hiệu để UI (Consumer/watch) tự động vẽ lại tên thật
+      }
+    } catch (e) {
+      debugPrint('[UserProvider] _preloadUser error: $e');
+    }
+  }
+
   Future<UserModel?> fetchUserById(String uid) async {
     try {
-      // nếu đã có cache thì dùng luôn
       if (_cache.containsKey(uid)) {
         return _cache[uid];
       }
@@ -30,6 +55,21 @@ class UserProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[UserProvider] fetchUserById error: $e');
       return null;
+    }
+  }
+
+  // Hàm cũ giữ nguyên để không lỗi các nơi khác đang await nó
+  Future<String> getDisplayName(String uid) async {
+    if (_cache.containsKey(uid)) {
+      return _cache[uid]!.displayName;
+    }
+
+    try {
+      final user = await fetchUserById(uid);
+      return user?.displayName ?? 'Unknown';
+    } catch (e) {
+      debugPrint('[UserProvider] getDisplayName error: $e');
+      return 'Unknown';
     }
   }
 
