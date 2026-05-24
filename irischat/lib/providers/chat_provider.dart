@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:irischat/models/user_model.dart';
 
 import '../models/chat_room_model.dart';
 import '../models/message_model.dart';
@@ -360,5 +361,24 @@ class ChatProvider extends ChangeNotifier {
     _roomsSubscription?.cancel();
     _messagesSubscription?.cancel();
     super.dispose();
+  }
+  // ===========================================================================
+  // CREATE ROOM IF NOT EXISTS
+  // ===========================================================================
+
+  Future<ChatRoomModel> create1to1Room({
+    required UserModel currentUser,
+    required UserModel friend,
+  }) async {
+    final room = ChatRoomModel.create1to1(
+      currentUid: currentUser.uid,
+      friendUid: friend.uid,
+      friendName: friend.displayName,
+      friendAvatar: friend.avatarUrl,
+    );
+
+    await _chatService.createChatRoomIfNotExists(room);
+
+    return room;
   }
 }

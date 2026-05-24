@@ -149,10 +149,36 @@ class FriendshipProvider extends ChangeNotifier {
   }
 
   // Thêm vào class FriendshipProvider
-  Future<void> acceptRequest(FriendshipModel request) async {
+  // Thêm vào class FriendshipProvider
+  Future<void> acceptRequest({
+    required FriendshipModel request,
+    required String currentUid,
+    required String friendName, // Tên của người vừa được chấp nhận kết bạn
+    required String friendAvatar, // Avatar của người vừa được chấp nhận kết bạn
+  }) async {
     try {
+      // 1. Cập nhật trạng thái lời mời thành "accepted" trên Firebase
       await _service.acceptFriendRequest(request: request);
       print('[FriendshipProvider] Chấp nhận kết bạn thành công');
+
+      // 2. Xác định friendUid (từ senderId hoặc receiverId tùy thuộc vào ai gửi)
+      // Thường khi mình accept, mình là receiver, người kia là sender.
+      final friendUid = (request.senderId == currentUid)
+          ? request.receiverId
+          : request.senderId;
+
+      // 3. Khởi tạo Room 1-1 rỗng
+      final room = ChatRoomModel.create1to1(
+        currentUid: currentUid,
+        friendUid: friendUid,
+        friendName: friendName,
+        friendAvatar: friendAvatar,
+      );
+
+      // 4. Lưu Room lên Firebase
+      // Giả sử bạn có hàm create1to1ChatRoom (hoặc dùng chung hàm lưu room)
+      await _service.create1to1ChatRoom(room: room);
+      print('[FriendshipProvider] Khởi tạo phòng chat 1-1 thành công');
     } catch (e) {
       print('[FriendshipProvider] Lỗi acceptRequest: $e');
     }

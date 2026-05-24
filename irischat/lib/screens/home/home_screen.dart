@@ -47,7 +47,6 @@ class _HomeScreenState extends State<HomeScreen> {
       friendshipProvider.listenFriends(user.uid);
       chatProvider.listenAllChatRooms(user.uid);
 
-      // 🔥 LẮNG NGHE QUA PROVIDER (Đúng chuẩn kiến trúc)
       // _listenToIncomingCalls(user.uid);
     }
   }
@@ -74,12 +73,9 @@ class _HomeScreenState extends State<HomeScreen> {
             }
           }
 
-          // 🔥 KHI NHẬN ĐƯỢC TÍN HIỆU 'ended' TỪ ĐỐI PHƯƠNG
           if (call.status == 'ended') {
-            // Máy còn lại cũng tự gọi Provider để dọn dẹp cam/mic của mình
             await context.read<CallProvider>().endCall();
 
-            // Nếu đang ở trong màn hình CallScreen thì lùi ra ngoài
             if (mounted && Navigator.canPop(context)) {
               Navigator.pop(context);
             }
@@ -87,26 +83,71 @@ class _HomeScreenState extends State<HomeScreen> {
         });
   }
 
+  // Giao diện Hộp thoại cuộc gọi đến được thiết kế lại đẹp và sang hơn
   void _showIncomingCallDialog(CallModel call) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) {
         return AlertDialog(
-          title: const Text('Cuộc gọi đến'),
-          content: Text('Người gọi: ${call.callerId}'),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.phone_callback_rounded,
+                color: Colors.teal[600],
+                size: 28,
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Cuộc gọi đến',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Bạn có cuộc gọi mới từ:',
+                style: TextStyle(color: Colors.grey[600], fontSize: 14),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                call.callerId,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                  color: Colors.blueGrey[800],
+                ),
+              ),
+            ],
+          ),
+          actionsPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 8,
+          ),
           actions: [
             TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.green[600],
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                textStyle: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
               onPressed: () async {
-                // Người nhận bấm nút này CHỈ làm 1 nhiệm vụ duy nhất:
-                // Báo lên Firebase là tôi đã đồng ý nhận cuộc gọi.
-                // Việc chuyển màn hình sẽ do hàm "_listenToIncomingCalls" ở trên lo liệu tự động.
+                // GIỮ NGUYÊN LOGIC KÍCH HOẠT CUỘC GỌI
                 await context.read<CallProvider>().acceptCall(call.callId);
               },
-              child: const Text(
-                'Chấp nhận',
-                style: TextStyle(color: Colors.green),
-              ),
+              child: const Text('Chấp nhận'),
             ),
           ],
         );
@@ -116,7 +157,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    // 🔥 QUAN TRỌNG: Hủy lắng nghe cuộc gọi khi màn hình này bị đóng
     _callSubscription?.cancel();
     super.dispose();
   }
@@ -129,73 +169,135 @@ class _HomeScreenState extends State<HomeScreen> {
       ProfileTab(authProvider: authProvider),
     ];
 
+    final primaryColor = Colors.teal[600]!;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Chat App')),
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        title: const Text(
+          'Chat App',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+            letterSpacing: 0.3,
+          ),
+        ),
+        backgroundColor: primaryColor,
+        elevation: 0,
+        centerTitle: true,
+      ),
 
       body: IndexedStack(index: currentIndex, children: pages),
 
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: currentIndex,
-        onTap: (index) => setState(() => currentIndex = index),
-        items: [
-          BottomNavigationBarItem(
-            label: 'Home',
-            icon: Consumer<ChatProvider>(
-              builder: (context, chatProvider, child) {
-                return Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    const Icon(Icons.home),
-
-                    if (chatProvider.hasUnreadMessages)
-                      Positioned(
-                        right: -1,
-                        top: -1,
-                        child: Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 1.5),
+      // Custom lại BottomNavigationBar bo góc nhẹ kèm đổ bóng mờ hiện đại
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          currentIndex: currentIndex,
+          onTap: (index) => setState(() => currentIndex = index),
+          backgroundColor: Colors.white,
+          selectedItemColor: primaryColor,
+          unselectedItemColor: Colors.blueGrey[300],
+          selectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 12,
+          ),
+          type: BottomNavigationBarType.fixed,
+          elevation: 0,
+          items: [
+            BottomNavigationBarItem(
+              label: 'Trò chuyện',
+              icon: Consumer<ChatProvider>(
+                builder: (context, chatProvider, child) {
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Icon(
+                        currentIndex == 0
+                            ? Icons.chat_rounded
+                            : Icons.chat_bubble_outline_rounded,
+                      ),
+                      if (chatProvider.hasUnreadMessages)
+                        Positioned(
+                          right: -2,
+                          top: -2,
+                          child: Container(
+                            width: 11,
+                            height: 11,
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 1.8,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                  ],
-                );
-              },
+                    ],
+                  );
+                },
+              ),
             ),
-          ),
 
-          BottomNavigationBarItem(
-            label: 'Friends',
-            icon: Consumer<FriendshipProvider>(
-              builder: (context, friendshipProvider, child) {
-                return Stack(
-                  children: [
-                    const Icon(Icons.people),
-
-                    if (friendshipProvider.hasNotification)
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        child: Container(
-                          width: 10,
-                          height: 10,
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
+            BottomNavigationBarItem(
+              label: 'Bạn bè',
+              icon: Consumer<FriendshipProvider>(
+                builder: (context, friendshipProvider, child) {
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Icon(
+                        currentIndex == 1
+                            ? Icons.people_rounded
+                            : Icons.people_outline_rounded,
+                      ),
+                      if (friendshipProvider.hasNotification)
+                        Positioned(
+                          right: -2,
+                          top: -2,
+                          child: Container(
+                            width: 11,
+                            height: 11,
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent,
+                              shape: BoxShape.circle,
+                              // Chuẩn hóa viền trắng đồng bộ góc nhìn cực sạch
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 1.8,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                  ],
-                );
-              },
+                    ],
+                  );
+                },
+              ),
             ),
-          ),
 
-          BottomNavigationBarItem(label: 'Profile', icon: Icon(Icons.person)),
-        ],
+            BottomNavigationBarItem(
+              label: 'Cá nhân',
+              icon: Icon(
+                currentIndex == 2
+                    ? Icons.person_rounded
+                    : Icons.person_outline_rounded,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

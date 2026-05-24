@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:irischat/models/chat_room_model.dart';
 import 'package:irischat/models/user_model.dart';
+import 'package:irischat/providers/chat_provider.dart';
 import 'package:irischat/providers/user_provider.dart';
 import 'package:irischat/screens/home/widget/friendship_action_button.dart';
 import 'package:provider/provider.dart';
@@ -59,77 +60,128 @@ class _FriendsTabState extends State<FriendsTab> {
         return DefaultTabController(
           length: 3,
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Column(
               children: [
+                // Thanh công cụ: Tìm kiếm & Tạo nhóm
                 Row(
                   children: [
                     Expanded(
                       child: TextField(
                         controller: searchController,
+                        style: const TextStyle(fontSize: 14),
                         decoration: InputDecoration(
-                          hintText: 'Search friends by email...',
-                          suffixIcon: IconButton(
-                            icon: const Icon(Icons.search),
-                            onPressed: () async {
-                              final keyword = searchController.text.trim();
-                              if (keyword.isEmpty) return;
-
-                              await friendshipProvider.searchByEmail(
-                                keyword: keyword,
-                                currentUid: widget.currentUser.uid,
-                              );
-                            },
+                          hintText: 'Tìm theo email...',
+                          hintStyle: TextStyle(color: Colors.blueGrey.shade300),
+                          filled: true,
+                          fillColor: Colors.grey.shade100,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 14,
                           ),
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(30),
+                            borderSide: BorderSide.none,
+                          ),
+                          suffixIcon: Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: IconButton(
+                              icon: const Icon(Icons.search_rounded),
+                              color: Colors.teal.shade500,
+                              onPressed: () async {
+                                final keyword = searchController.text.trim();
+                                if (keyword.isEmpty) return;
+
+                                await friendshipProvider.searchByEmail(
+                                  keyword: keyword,
+                                  currentUid: widget.currentUser.uid,
+                                );
+                              },
+                            ),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      label: const Text("Create Group"),
-                      icon: const Icon(Icons.group_add),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal.shade600,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.all(14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
                       onPressed: () {
                         _showCreateGroupDialog();
                       },
+                      child: const Icon(Icons.group_add_rounded, size: 22),
                     ),
                   ],
                 ),
 
-                // Post-search result card
+                // Thẻ hiển thị kết quả tìm kiếm
                 if (friendshipProvider.searchedUser != null) ...[
                   const SizedBox(height: 16),
                   _buildSearchResultCard(friendshipProvider),
                 ],
 
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
 
-                TabBar(
-                  labelColor: Colors.blue,
-                  unselectedLabelColor: Colors.grey,
-                  tabs: [
-                    Tab(
-                      text:
-                          'Received (${friendshipProvider.receivedRequests.length})',
+                // TabBar bo góc hiện đại
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: TabBar(
+                    dividerColor: Colors.transparent,
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    indicator: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
-                    Tab(
-                      text: 'Sent (${friendshipProvider.sentRequests.length})',
+                    labelColor: Colors.teal.shade700,
+                    labelStyle: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
                     ),
-                    Tab(
-                      text:
-                          'Friends (${friendshipProvider.friendsList.length})',
-                    ),
-                  ],
+                    unselectedLabelColor: Colors.blueGrey.shade400,
+                    tabs: [
+                      Tab(
+                        text:
+                            'Nhận (${friendshipProvider.receivedRequests.length})',
+                      ),
+                      Tab(
+                        text: 'Gửi (${friendshipProvider.sentRequests.length})',
+                      ),
+                      Tab(
+                        text:
+                            'Bạn bè (${friendshipProvider.friendsList.length})',
+                      ),
+                    ],
+                  ),
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
 
+                // Nội dung các Tabs
                 Expanded(
                   child: TabBarView(
                     children: [
-                      _buildReceivedTab(friendshipProvider),
+                      _buildReceivedTab(
+                        friendshipProvider,
+                        watchedUserProvider,
+                      ),
                       _buildSentTab(friendshipProvider, watchedUserProvider),
                       _buildFriendsTab(friendshipProvider),
                     ],
@@ -143,66 +195,92 @@ class _FriendsTabState extends State<FriendsTab> {
     );
   }
 
+  // ===========================================================================
+  // WIDGET KẾT QUẢ TÌM KIẾM
+  // ===========================================================================
   Widget _buildSearchResultCard(FriendshipProvider provider) {
     final searchedUser = provider.searchedUser!;
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 24,
-              backgroundImage: searchedUser.avatarUrl.isNotEmpty
-                  ? NetworkImage(searchedUser.avatarUrl)
-                  : null,
-              child: searchedUser.avatarUrl.isEmpty
-                  ? Text(searchedUser.displayName[0].toUpperCase())
-                  : null,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    searchedUser.displayName,
-                    style: const TextStyle(
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.teal.shade100, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.teal.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: Colors.teal.shade50,
+            backgroundImage: searchedUser.avatarUrl.isNotEmpty
+                ? NetworkImage(searchedUser.avatarUrl)
+                : null,
+            child: searchedUser.avatarUrl.isEmpty
+                ? Text(
+                    searchedUser.displayName[0].toUpperCase(),
+                    style: TextStyle(
+                      color: Colors.teal.shade700,
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontSize: 18,
                     ),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  searchedUser.displayName,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: Colors.blueGrey.shade900,
                   ),
-                  Text(
-                    searchedUser.email,
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  searchedUser.email,
+                  style: TextStyle(
+                    color: Colors.blueGrey.shade400,
+                    fontSize: 12,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-
-            FriendshipActionButton(
-              targetUser: searchedUser,
-              currentUser: widget.currentUser,
+          ),
+          FriendshipActionButton(
+            targetUser: searchedUser,
+            currentUser: widget.currentUser,
+          ),
+          IconButton(
+            icon: Icon(
+              Icons.close_rounded,
+              size: 20,
+              color: Colors.blueGrey.shade300,
             ),
-
-            IconButton(
-              icon: const Icon(Icons.close, size: 18, color: Colors.grey),
-              onPressed: () {
-                provider.clearSearch();
-              },
-            ),
-          ],
-        ),
+            onPressed: () => provider.clearSearch(),
+          ),
+        ],
       ),
     );
   }
 
+  // ===========================================================================
+  // TAB DANH SÁCH BẠN BÈ
+  // ===========================================================================
   Widget _buildFriendsTab(FriendshipProvider provider) {
     if (provider.friendsList.isEmpty) {
-      return const Center(child: Text("No friends yet"));
+      return _buildEmptyState(Icons.people_alt_outlined, "Chưa có bạn bè nào");
     }
 
     return ListView.builder(
@@ -211,50 +289,137 @@ class _FriendsTabState extends State<FriendsTab> {
         final friend = provider.friendsList[index];
 
         return ListTile(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 4,
+          ),
           leading: CircleAvatar(
+            radius: 24,
+            backgroundColor: Colors.teal.shade50,
             child: Text(
               friend.displayName.isNotEmpty
                   ? friend.displayName[0].toUpperCase()
                   : '?',
+              style: TextStyle(
+                color: Colors.teal.shade700,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
-          title: Text(friend.displayName),
-          subtitle: Text(friend.email),
-          trailing: IconButton(
-            icon: const Icon(Icons.chat, color: Colors.blue),
-            onPressed: () {
-              final room = _createRoom(friend);
-              Navigator.pushNamed(context, AppRoutes.chat, arguments: room);
-            },
+          title: Text(
+            friend.displayName,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.blueGrey.shade900,
+            ),
+          ),
+          subtitle: Text(
+            friend.email,
+            style: TextStyle(color: Colors.blueGrey.shade400, fontSize: 13),
+          ),
+          trailing: Container(
+            decoration: BoxDecoration(
+              color: Colors.blue.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: const Icon(
+                Icons.chat_rounded,
+                color: Colors.blue,
+                size: 20,
+              ),
+              onPressed: () async {
+                final chatProvider = context.read<ChatProvider>();
+                final room = await chatProvider.create1to1Room(
+                  currentUser: widget.currentUser,
+                  friend: friend,
+                );
+                if (!context.mounted) return;
+                Navigator.pushNamed(context, AppRoutes.chat, arguments: room);
+              },
+            ),
           ),
         );
       },
     );
   }
 
-  Widget _buildReceivedTab(FriendshipProvider provider) {
+  // ===========================================================================
+  // TAB LỜI MỜI KẾT BẠN (NHẬN)
+  // ===========================================================================
+  Widget _buildReceivedTab(
+    FriendshipProvider provider,
+    UserProvider uProvider,
+  ) {
     if (provider.receivedRequests.isEmpty) {
-      return const Center(child: Text("No pending requests"));
+      return _buildEmptyState(
+        Icons.inbox_rounded,
+        "Không có lời mời kết bạn nào",
+      );
     }
 
     return ListView.builder(
       itemCount: provider.receivedRequests.length,
       itemBuilder: (context, index) {
         final req = provider.receivedRequests[index];
+        final senderName = uProvider.getDisplayNameFromCache(req.senderId);
+        final senderAvatar = uProvider.getAvatarUrlFromCache(req.senderId);
 
         return ListTile(
-          title: Text(req.senderEmail),
-          subtitle: const Text("Friend request"),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 6,
+          ),
+          leading: CircleAvatar(
+            radius: 24,
+            backgroundColor: Colors.teal.shade50,
+            backgroundImage: senderAvatar != null && senderAvatar.isNotEmpty
+                ? NetworkImage(senderAvatar)
+                : null,
+            child: senderAvatar == null || senderAvatar.isEmpty
+                ? Text(
+                    senderName.isNotEmpty ? senderName[0].toUpperCase() : '?',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.teal.shade700,
+                    ),
+                  )
+                : null,
+          ),
+          title: Text(
+            senderName.isNotEmpty ? senderName : req.senderEmail,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.blueGrey.shade900,
+            ),
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              "Đã gửi lời mời kết bạn",
+              style: TextStyle(color: Colors.blueGrey.shade400, fontSize: 12),
+            ),
+          ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                icon: const Icon(Icons.check, color: Colors.green),
-                onPressed: () => provider.acceptRequest(req),
+              _buildTonalButton(
+                icon: Icons.check_rounded,
+                color: Colors.green,
+                onTap: () {
+                  provider.acceptRequest(
+                    request: req,
+                    currentUid: widget.currentUser.uid,
+                    friendName: senderName,
+                    friendAvatar: senderAvatar ?? '',
+                  );
+                },
               ),
-              IconButton(
-                icon: const Icon(Icons.close, color: Colors.red),
-                onPressed: () => provider.rejectRequest(req.requestId),
+              const SizedBox(width: 8),
+              _buildTonalButton(
+                icon: Icons.close_rounded,
+                color: Colors.red,
+                onTap: () => provider.rejectRequest(req.requestId),
               ),
             ],
           ),
@@ -263,27 +428,79 @@ class _FriendsTabState extends State<FriendsTab> {
     );
   }
 
+  // ===========================================================================
+  // TAB LỜI MỜI ĐÃ GỬI
+  // ===========================================================================
   Widget _buildSentTab(FriendshipProvider provider, UserProvider uProvider) {
     if (provider.sentRequests.isEmpty) {
-      return const Center(child: Text("No sent requests"));
+      return _buildEmptyState(Icons.send_rounded, "Bạn chưa gửi lời mời nào");
     }
+
     return ListView.builder(
       itemCount: provider.sentRequests.length,
       itemBuilder: (context, index) {
         final req = provider.sentRequests[index];
         final displayName = uProvider.getDisplayNameFromCache(req.receiverId);
+        final avatarUrl = uProvider.getAvatarUrlFromCache(req.receiverId);
+
         return ListTile(
-          title: Text(displayName),
-          subtitle: const Text("Pending"),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 6,
+          ),
+          leading: CircleAvatar(
+            radius: 24,
+            backgroundColor: Colors.teal.shade50,
+            backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
+                ? NetworkImage(avatarUrl)
+                : null,
+            child: avatarUrl == null || avatarUrl.isEmpty
+                ? Text(
+                    displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.teal.shade700,
+                    ),
+                  )
+                : null,
+          ),
+          title: Text(
+            displayName,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.blueGrey.shade900,
+            ),
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              "Đang chờ xác nhận...",
+              style: TextStyle(color: Colors.blueGrey.shade400, fontSize: 12),
+            ),
+          ),
           trailing: TextButton(
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.red.withValues(alpha: 0.1),
+              foregroundColor: Colors.red.shade600,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            ),
             onPressed: () => provider.cancelRequest(req.requestId),
-            child: const Text("Cancel"),
+            child: const Text(
+              "Hủy",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
           ),
         );
       },
     );
   }
 
+  // ===========================================================================
+  // DIALOG TẠO NHÓM
+  // ===========================================================================
   void _showCreateGroupDialog() {
     final TextEditingController groupNameController = TextEditingController();
     List<String> selectedFriendIds = [];
@@ -294,91 +511,177 @@ class _FriendsTabState extends State<FriendsTab> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text("Create New Group"),
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              title: const Text(
+                "Tạo Nhóm Mới",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+                textAlign: TextAlign.center,
+              ),
               content: SizedBox(
                 width: double.maxFinite,
-                height: 300,
+                height: 340,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextField(
                       controller: groupNameController,
-                      decoration: const InputDecoration(
-                        hintText: "Enter group name...",
-                        prefixIcon: Icon(Icons.group),
+                      decoration: InputDecoration(
+                        hintText: "Nhập tên nhóm...",
+                        hintStyle: TextStyle(color: Colors.blueGrey.shade300),
+                        prefixIcon: Icon(
+                          Icons.group_rounded,
+                          color: Colors.teal.shade500,
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 14,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: Colors.grey.shade200),
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    const Align(
+                    const SizedBox(height: 20),
+                    Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        "Select members:",
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                        "Chọn thành viên:",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blueGrey.shade700,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
                     Expanded(
                       child: friendshipProvider.friendsList.isEmpty
-                          ? const Center(child: Text("No friends to add"))
-                          : ListView.builder(
-                              itemCount: friendshipProvider.friendsList.length,
-                              itemBuilder: (context, index) {
-                                final friend =
-                                    friendshipProvider.friendsList[index];
+                          ? Center(
+                              child: Text(
+                                "Chưa có bạn bè để thêm",
+                                style: TextStyle(
+                                  color: Colors.blueGrey.shade300,
+                                ),
+                              ),
+                            )
+                          : Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade200),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: ListView.separated(
+                                itemCount:
+                                    friendshipProvider.friendsList.length,
+                                separatorBuilder: (_, __) => Divider(
+                                  height: 1,
+                                  color: Colors.grey.shade100,
+                                ),
+                                itemBuilder: (context, index) {
+                                  final friend =
+                                      friendshipProvider.friendsList[index];
+                                  final isSelected = selectedFriendIds.contains(
+                                    friend.uid,
+                                  );
 
-                                return CheckboxListTile(
-                                  secondary: CircleAvatar(
-                                    child: Text(
-                                      friend.displayName.isNotEmpty
-                                          ? friend.displayName[0].toUpperCase()
-                                          : '?',
+                                  return CheckboxListTile(
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 4,
                                     ),
-                                  ),
-                                  title: Text(friend.displayName),
-                                  value: selectedFriendIds.contains(friend.uid),
-                                  onChanged: (value) {
-                                    setDialogState(() {
-                                      if (value == true) {
-                                        selectedFriendIds.add(friend.uid);
-                                      } else {
-                                        selectedFriendIds.remove(friend.uid);
-                                      }
-                                    });
-                                  },
-                                );
-                              },
+                                    activeColor: Colors.teal.shade600,
+                                    checkboxShape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    secondary: CircleAvatar(
+                                      radius: 18,
+                                      backgroundColor: isSelected
+                                          ? Colors.teal.shade100
+                                          : Colors.grey.shade100,
+                                      child: Text(
+                                        friend.displayName.isNotEmpty
+                                            ? friend.displayName[0]
+                                                  .toUpperCase()
+                                            : '?',
+                                        style: TextStyle(
+                                          color: isSelected
+                                              ? Colors.teal.shade800
+                                              : Colors.blueGrey.shade500,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    title: Text(
+                                      friend.displayName,
+                                      style: TextStyle(
+                                        fontWeight: isSelected
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                        color: Colors.blueGrey.shade900,
+                                      ),
+                                    ),
+                                    value: isSelected,
+                                    onChanged: (value) {
+                                      setDialogState(() {
+                                        if (value == true) {
+                                          selectedFriendIds.add(friend.uid);
+                                        } else {
+                                          selectedFriendIds.remove(friend.uid);
+                                        }
+                                      });
+                                    },
+                                  );
+                                },
+                              ),
                             ),
                     ),
                   ],
                 ),
               ),
+              actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               actions: [
                 TextButton(
-                  child: const Text("Cancel"),
                   onPressed: () {
                     groupNameController.dispose();
                     Navigator.pop(context);
                   },
+                  child: Text(
+                    "Hủy",
+                    style: TextStyle(
+                      color: Colors.blueGrey.shade400,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
                 ElevatedButton(
-                  child: const Text("Create"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal.shade600,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                    elevation: 0,
+                  ),
                   onPressed: () async {
                     final name = groupNameController.text.trim();
-
                     if (name.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Please enter a group name"),
-                        ),
-                      );
+                      _showSnackBar("Vui lòng nhập tên nhóm");
                       return;
                     }
                     if (selectedFriendIds.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Please select at least 1 friend"),
-                        ),
-                      );
+                      _showSnackBar("Vui lòng chọn ít nhất 1 thành viên");
                       return;
                     }
 
@@ -388,7 +691,6 @@ class _FriendsTabState extends State<FriendsTab> {
                         groupName: name,
                         friendIds: selectedFriendIds,
                       );
-
                       groupNameController.dispose();
 
                       if (context.mounted) {
@@ -400,19 +702,74 @@ class _FriendsTabState extends State<FriendsTab> {
                         );
                       }
                     } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text("Error creating group: $e")),
-                        );
-                      }
+                      if (context.mounted) _showSnackBar("Lỗi tạo nhóm: $e");
                     }
                   },
+                  child: const Text(
+                    "Tạo Nhóm",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             );
           },
         );
       },
+    );
+  }
+
+  // ===========================================================================
+  // HELPER WIDGETS
+  // ===========================================================================
+
+  // Nút trạng thái mờ (Tonal Button)
+  Widget _buildTonalButton({
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, size: 20, color: color),
+      ),
+    );
+  }
+
+  // Trạng thái trống (Empty State)
+  Widget _buildEmptyState(IconData icon, String message) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 64, color: Colors.blueGrey.shade100),
+          const SizedBox(height: 16),
+          Text(
+            message,
+            style: TextStyle(
+              color: Colors.blueGrey.shade400,
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
     );
   }
 }

@@ -12,7 +12,6 @@ class ChatMessageListWidget extends StatelessWidget {
   final ChatRoomModel room;
   final String? highlightedMessageId;
 
-  // Các Callback xử lý sự kiện đẩy ngược về file mẹ
   final Function(MessageModel message, bool isMe) onMessageLongPress;
   final Function(MessageModel message) onMessageDoubleTap;
   final Function(MessageModel message) onReplyTap;
@@ -36,17 +35,28 @@ class ChatMessageListWidget extends StatelessWidget {
         final messages = chatProvider.messages;
 
         if (messages.isEmpty) {
-          return const Center(
-            child: Text(
-              'Say hello to start the conversation!',
-              style: TextStyle(color: Colors.grey),
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.forum_outlined, size: 48, color: Colors.grey[300]),
+                const SizedBox(height: 12),
+                Text(
+                  'Say hello to start the conversation!',
+                  style: TextStyle(
+                    color: Colors.blueGrey[300],
+                    fontSize: 14,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
             ),
           );
         }
 
         return ListView.builder(
           controller: scrollController,
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
           reverse: true,
           itemCount: messages.length,
           itemBuilder: (context, index) {
@@ -54,7 +64,6 @@ class ChatMessageListWidget extends StatelessWidget {
             final isMe = message.senderId == currentUid;
             final sender = users[message.senderId];
 
-            // Phân tách ngày tháng dựa trên vị trí phần tử index
             bool showDateSeparator = false;
             if (index == messages.length - 1) {
               showDateSeparator = true;
@@ -93,32 +102,35 @@ class ChatMessageListWidget extends StatelessWidget {
   }
 
   // ===========================================================================
-  // CÁC HÀM BỔ TRỢ GIAO DIỆN (WIDGET COMPONENT HÀM THUẦN)
+  // DATE SEPARATOR (Đường chia ngày thiết kế tối giản)
   // ===========================================================================
-
   Widget _buildDateSeparator(int timestamp) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        children: [
-          const Expanded(child: Divider()),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Text(
-              _formatDate(timestamp),
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            _formatDate(timestamp),
+            style: TextStyle(
+              color: Colors.blueGrey[400],
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.3,
             ),
           ),
-          const Expanded(child: Divider()),
-        ],
+        ),
       ),
     );
   }
 
+  // ===========================================================================
+  // MESSAGE BUBBLE (Bóng chat cao cấp, bo góc mượt)
+  // ===========================================================================
   Widget _buildMessageBubble(
     BuildContext context,
     MessageModel message,
@@ -128,92 +140,119 @@ class ChatMessageListWidget extends StatelessWidget {
     final bool isImageMessage =
         message.type == 'image' && message.mediaUrl != null;
     final bool isHighlighted = message.messageId == highlightedMessageId;
+    final themeColor = Colors.teal[600]!;
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Column(
-        crossAxisAlignment: isMe
-            ? CrossAxisAlignment.end
-            : CrossAxisAlignment.start,
-        children: [
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            padding: isImageMessage
-                ? EdgeInsets.zero
-                : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              // Đổi màu nền sang Vàng nhạt nhấp nháy khi được kích hoạt Highlight tính năng jump-to-reply
-              color: isHighlighted
-                  ? Colors.yellow.shade200
-                  : (isImageMessage
-                        ? Colors.white
-                        : (isMe ? Colors.blueAccent : Colors.grey.shade200)),
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(16),
-                topRight: const Radius.circular(16),
-                bottomLeft: Radius.circular(isMe ? 16 : 0),
-                bottomRight: Radius.circular(isMe ? 0 : 16),
-              ),
-              boxShadow: isImageMessage
-                  ? [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1),
-                      ),
-                    ]
-                  : null,
-            ),
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.75,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (room.isGroup)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      isMe ? 'You' : (sender?.displayName ?? 'User'),
-                      style: TextStyle(
-                        color: isMe ? Colors.white70 : Colors.black54,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 3),
+        child: Column(
+          crossAxisAlignment: isMe
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
+          children: [
+            // Hiển thị tên thành viên nếu là Group Chat
+            if (room.isGroup && !isMe)
+              Padding(
+                padding: const EdgeInsets.only(left: 6, bottom: 3),
+                child: Text(
+                  sender?.displayName ?? 'User',
+                  style: TextStyle(
+                    color: Colors.blueGrey[400],
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
                   ),
-                if (message.replyToMessageId != null)
-                  _buildReplyInBubble(message, isMe),
-                _buildMessageContent(message, isMe),
-                const SizedBox(height: 4),
-                _buildMessageStatusRow(message, isMe),
-              ],
+                ),
+              ),
+
+            // Khối nội dung bong bóng chính
+            Container(
+              padding: isImageMessage
+                  ? (message.text.isNotEmpty
+                        ? const EdgeInsets.all(4)
+                        : EdgeInsets.zero)
+                  : const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              decoration: BoxDecoration(
+                gradient: isHighlighted
+                    ? LinearGradient(
+                        colors: [Colors.amber.shade100, Colors.amber.shade50],
+                      )
+                    : (isMe
+                          ? LinearGradient(
+                              colors: [
+                                themeColor,
+                                themeColor.withValues(alpha: 0.85),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            )
+                          : const LinearGradient(
+                              colors: [Color(0xFFF1F5F9), Color(0xFFF1F5F9)],
+                            )),
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(18),
+                  topRight: const Radius.circular(18),
+                  bottomLeft: Radius.circular(isMe ? 18 : 4),
+                  bottomRight: Radius.circular(isMe ? 4 : 18),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isMe ? 0.04 : 0.02),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.73,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (message.replyToMessageId != null)
+                    _buildReplyInBubble(message, isMe),
+                  _buildMessageContent(message, isMe),
+                  const SizedBox(height: 3),
+                  _buildMessageStatusRow(message, isMe),
+                ],
+              ),
             ),
-          ),
-          if (message.reactions != null && message.reactions!.isNotEmpty)
-            _buildReactions(message, isMe),
-        ],
+
+            // Khu vực thả cảm xúc (Reactions) dưới bóng chat
+            if (message.reactions != null && message.reactions!.isNotEmpty)
+              _buildReactions(message, isMe),
+          ],
+        ),
       ),
     );
   }
 
+  // ===========================================================================
+  // REPLY IN BUBBLE (Trích dẫn tin nhắn cũ lồng trong bóng chat)
+  // ===========================================================================
   Widget _buildReplyInBubble(MessageModel message, bool isMe) {
     final replySenderName = message.replySenderId == currentUid
         ? 'You'
         : (users[message.replySenderId]?.displayName ?? 'User');
 
     return GestureDetector(
-      onTap: () =>
-          onReplyTap(message), // Kích hoạt callback khi nhấn vào khung reply
+      onTap: () => onReplyTap(message),
       child: Container(
         margin: const EdgeInsets.only(bottom: 6),
-        padding: const EdgeInsets.all(6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         width: double.infinity,
         decoration: BoxDecoration(
           color: isMe
-              ? Colors.white.withOpacity(0.15)
-              : Colors.black.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(8),
+              ? Colors.white.withValues(alpha: 0.15)
+              : Colors.black.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(10),
+          border: Border(
+            left: BorderSide(
+              color: isMe ? Colors.white70 : Colors.teal.shade400,
+              width: 3,
+            ),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -223,9 +262,10 @@ class ChatMessageListWidget extends StatelessWidget {
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 11,
-                color: isMe ? Colors.white : Colors.black87,
+                color: isMe ? Colors.white : Colors.teal.shade700,
               ),
             ),
+            const SizedBox(height: 1),
             Text(
               (message.replyText?.isNotEmpty == true)
                   ? message.replyText!
@@ -234,7 +274,9 @@ class ChatMessageListWidget extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 12,
-                color: isMe ? Colors.white70 : Colors.black54,
+                color: isMe
+                    ? Colors.white.withValues(alpha: 0.8)
+                    : Colors.blueGrey[700],
               ),
             ),
           ],
@@ -243,132 +285,201 @@ class ChatMessageListWidget extends StatelessWidget {
     );
   }
 
+  // ===========================================================================
+  // CONTENT BUILDERS (Hình ảnh, Tập tin, Văn bản)
+  // ===========================================================================
   Widget _buildMessageContent(MessageModel message, bool isMe) {
     if (message.isDeleted) {
       return Text(
         isMe ? 'You recalled a message' : 'This message was recalled',
         style: TextStyle(
-          color: isMe ? Colors.white70 : Colors.black45,
+          color: isMe ? Colors.white.withValues(alpha: 0.6) : Colors.grey[400],
           fontStyle: FontStyle.italic,
+          fontSize: 14,
         ),
       );
-    } else if (message.type == 'image' && message.mediaUrl != null) {
+    }
+
+    // Tin nhắn Dạng Hình ảnh
+    if (message.type == 'image' && message.mediaUrl != null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(14),
             child: Image.network(
               message.mediaUrl!,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.broken_image, size: 40),
-            ),
-          ),
-          if (message.text.isNotEmpty) _buildCaptionText(message.text, isMe),
-        ],
-      );
-    } else if (message.type == 'file') {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.insert_drive_file,
-                color: isMe ? Colors.white : Colors.blue,
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  message.fileName ?? 'File',
-                  style: TextStyle(
-                    color: isMe ? Colors.white : Colors.black87,
-                    decoration: TextDecoration.underline,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Container(
+                  height: 160,
+                  width: 200,
+                  color: Colors.grey[100],
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        isMe ? Colors.white54 : Colors.teal,
+                      ),
+                    ),
                   ),
+                );
+              },
+              errorBuilder: (_, __, ___) => Container(
+                padding: const EdgeInsets.all(20),
+                color: Colors.grey[100],
+                child: const Icon(
+                  Icons.broken_image_outlined,
+                  size: 36,
+                  color: Colors.grey,
                 ),
               ),
-            ],
+            ),
           ),
           if (message.text.isNotEmpty) _buildCaptionText(message.text, isMe),
         ],
       );
     }
 
+    // Tin nhắn Dạng File đính kèm
+    if (message.type == 'file') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isMe ? Colors.white.withValues(alpha: 0.12) : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: isMe ? null : Border.all(color: Colors.grey.shade200),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: isMe
+                      ? Colors.white.withValues(alpha: 0.2)
+                      : Colors.teal.shade50,
+                  child: Icon(
+                    Icons.description_rounded,
+                    size: 18,
+                    color: isMe ? Colors.white : Colors.teal[600],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    message.fileName ?? 'Tập tin',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isMe ? Colors.white : Colors.blueGrey[800],
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (message.text.isNotEmpty) _buildCaptionText(message.text, isMe),
+        ],
+      );
+    }
+
+    // Tin nhắn Văn bản thường
     return Text(
       message.text,
       style: TextStyle(
-        color: isMe ? Colors.white : Colors.black87,
+        color: isMe ? Colors.white : Colors.blueGrey[900],
         fontSize: 15,
+        height: 1.3,
       ),
     );
   }
 
   Widget _buildCaptionText(String text, bool isMe) {
     return Padding(
-      padding: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.fromLTRB(4, 6, 4, 2),
       child: Text(
         text,
         style: TextStyle(
-          color: isMe ? Colors.white : Colors.black87,
+          color: isMe
+              ? Colors.white.withValues(alpha: 0.95)
+              : Colors.blueGrey[800],
           fontSize: 14,
         ),
       ),
     );
   }
 
+  // ===========================================================================
+  // STATUS ROW (Thời gian nhận & Icon tích xanh đôi nhận diện trạng thái)
+  // ===========================================================================
   Widget _buildMessageStatusRow(MessageModel message, bool isMe) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
+        const SizedBox(width: 24), // Tạo khoảng trống tối thiểu tránh đè chữ
         Text(
           _formatTime(message.timestamp),
           style: TextStyle(
-            color: isMe ? Colors.white70 : Colors.black45,
-            fontSize: 10,
+            color: isMe
+                ? Colors.white.withValues(alpha: 0.65)
+                : Colors.blueGrey[300],
+            fontSize: 9.5,
           ),
         ),
         if (isMe) ...[
           const SizedBox(width: 4),
           Icon(
-            message.status == 'read' ? Icons.done_all : Icons.done,
-            size: 14,
+            message.status == 'read'
+                ? Icons.done_all_rounded
+                : Icons.done_rounded,
+            size: 13,
             color: message.status == 'read'
-                ? Colors.lightBlueAccent
-                : Colors.white70,
+                ? Colors.cyan[200]
+                : Colors.white.withValues(alpha: 0.5),
           ),
         ],
       ],
     );
   }
 
+  // ===========================================================================
+  // REACTIONS (Hiển thị biểu tượng cảm xúc bong bóng chồng góc)
+  // ===========================================================================
   Widget _buildReactions(MessageModel message, bool isMe) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 10, right: 10, bottom: 4),
+    return Transform.translate(
+      offset: Offset(isMe ? -4 : 4, -5), // Tạo độ nhô đè lên thành bóng chat
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 2,
-              offset: const Offset(0, 1),
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
             ),
           ],
+          border: Border.all(color: Colors.grey.shade100, width: 1),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: message.reactions!.values
               .toSet()
               .map(
-                (emoji) => Text(
-                  emoji.toString(),
-                  style: const TextStyle(fontSize: 12),
+                (emoji) => Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: Text(
+                    emoji.toString(),
+                    style: const TextStyle(fontSize: 11),
+                  ),
                 ),
               )
               .toList(),

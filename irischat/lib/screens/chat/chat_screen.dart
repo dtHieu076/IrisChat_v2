@@ -10,7 +10,7 @@ import 'package:irischat/screens/chat/widget/ChatInputWidget.dart';
 import 'package:irischat/screens/chat/widget/ChatSendingIndecatorWidget.dart';
 import 'package:irischat/screens/chat/widget/ForwardBottomSheet.dart';
 import 'package:irischat/screens/chat/widget/NotFriendWarningWidget.dart';
-import 'package:irischat/screens/chat/widget/ChatMessageListWidget.dart'; // Import file mới bóc tách
+import 'package:irischat/screens/chat/widget/ChatMessageListWidget.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -36,12 +36,11 @@ class _ChatScreenState extends State<ChatScreen> {
   final Map<String, UserModel> users = {};
 
   MessageModel? _replyingMessage;
-  String? _highlightedMessageId; // Quản lý ID tin nhắn gốc cần nhấp nháy
+  String? _highlightedMessageId;
 
-  bool _isSearchBarVisible = false; // Ẩn/hiện thanh nhập từ khóa ở đỉnh
-  List<MessageModel> _searchResults = []; // Danh sách tin nhắn khớp từ khóa
-  int _currentSearchIndex =
-      -1; // Chỉ số tin nhắn đang tập trung (-1 là chưa chọn)
+  bool _isSearchBarVisible = false;
+  List<MessageModel> _searchResults = [];
+  int _currentSearchIndex = -1;
 
   @override
   void initState() {
@@ -106,7 +105,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final chatProvider = context.read<ChatProvider>();
 
-    // Lọc danh sách tin nhắn: Thỏa mãn chứa keyword, không bị xóa, và là tin nhắn text
     final matches = chatProvider.messages.where((msg) {
       final isText = msg.type == 'text' || msg.type == null;
       return isText &&
@@ -117,7 +115,6 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _searchResults = matches;
       if (_searchResults.isNotEmpty) {
-        // Mặc định nhảy tới tin nhắn mới nhất khớp kết quả (nằm ở cuối mảng matches)
         _currentSearchIndex = _searchResults.length - 1;
         _jumpToSearchMatch(_currentSearchIndex);
       } else {
@@ -127,32 +124,27 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  // Điều hướng qua lại giữa các kết quả (Mũi tên lên/xuống)
   void _navigateSearch(bool goUp) {
     if (_searchResults.isEmpty) return;
 
     setState(() {
       if (goUp) {
-        // Lên trên = tìm tin cũ hơn = giảm index trong mảng kết quả
         if (_currentSearchIndex > 0) {
           _currentSearchIndex--;
         } else {
-          _currentSearchIndex =
-              _searchResults.length - 1; // Vòng lặp lại tin mới nhất
+          _currentSearchIndex = _searchResults.length - 1;
         }
       } else {
-        // Xuống dưới = tìm tin mới hơn = tăng index trong mảng kết quả
         if (_currentSearchIndex < _searchResults.length - 1) {
           _currentSearchIndex++;
         } else {
-          _currentSearchIndex = 0; // Vòng lặp lại tin cũ nhất
+          _currentSearchIndex = 0;
         }
       }
       _jumpToSearchMatch(_currentSearchIndex);
     });
   }
 
-  // Thực hiện cuộn màn hình và highlight tin nhắn được chọn
   void _jumpToSearchMatch(int searchIndex) {
     if (searchIndex < 0 || searchIndex >= _searchResults.length) return;
 
@@ -171,12 +163,10 @@ class _ChatScreenState extends State<ChatScreen> {
         curve: Curves.easeInOut,
       );
 
-      // Gán ID để Widget con tô màu vàng cố định (không dùng bộ Timer tự tắt nữa)
       _highlightedMessageId = targetMessage.messageId;
     }
   }
 
-  // Tắt chế độ tìm kiếm, dọn dẹp bộ nhớ tạm
   void _closeSearchMode() {
     setState(() {
       _isSearchBarVisible = false;
@@ -187,9 +177,6 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  // ===========================================================================
-  // CÁC HÀM LOGIC XỬ LÝ SỰ KIỆN GIỮ LẠI Ở FILE MẸ
-  // ===========================================================================
   void _onSendMessage() {
     final text = _messageController.text.trim();
     if (text.isEmpty || currentUid == null) return;
@@ -249,11 +236,25 @@ class _ChatScreenState extends State<ChatScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Search Messages'),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text(
+            'Tìm kiếm tin nhắn',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           content: TextField(
-            decoration: const InputDecoration(
-              hintText: 'Enter keyword...',
-              border: OutlineInputBorder(),
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Nhập từ khóa...',
+              prefixIcon: const Icon(Icons.search_rounded),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.teal),
+              ),
             ),
             onSubmitted: (keyword) {
               Navigator.pop(context);
@@ -262,7 +263,7 @@ class _ChatScreenState extends State<ChatScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
+              child: const Text('Đóng', style: TextStyle(color: Colors.grey)),
             ),
           ],
         );
@@ -274,24 +275,40 @@ class _ChatScreenState extends State<ChatScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) {
         return Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
           decoration: const BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: [
+              BoxShadow(color: Colors.black12, blurRadius: 20, spreadRadius: 2),
+            ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Thanh vuốt trên cùng của Bottom Sheet tạo cảm giác mượt mà
+              Container(
+                width: 44,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 22),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // Khối chứa các biểu cảm cảm xúc (Rections) bồng bềnh
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
+                  horizontal: 16,
+                  vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(30),
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(32),
+                  border: Border.all(color: Colors.grey.shade100),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -304,14 +321,18 @@ class _ChatScreenState extends State<ChatScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
+              // Menu các phím chức năng dạng lưới/hàng ngang phân bổ khoa học
               Wrap(
                 spacing: 20,
                 runSpacing: 20,
+                alignment: WrapAlignment.center,
                 children: [
                   _actionButton(
-                    icon: Icons.reply,
-                    label: 'Reply',
+                    icon: Icons.reply_rounded,
+                    label: 'Trả lời',
+                    color: Colors.blue[50]!,
+                    iconColor: Colors.blue[700]!,
                     onTap: () {
                       Navigator.pop(context);
                       setState(() {
@@ -320,39 +341,34 @@ class _ChatScreenState extends State<ChatScreen> {
                     },
                   ),
                   _actionButton(
-                    icon: Icons.copy,
-                    label: 'Copy',
+                    icon: Icons.content_copy_rounded,
+                    label: 'Sao chép',
+                    color: Colors.orange[50]!,
+                    iconColor: Colors.orange[700]!,
                     onTap: () => Navigator.pop(context),
                   ),
                   _actionButton(
-                    icon: Icons.forward, // Hoặc Icons.share
-                    label: 'Forward',
+                    icon: Icons.forward_rounded,
+                    label: 'Chuyển tiếp',
+                    color: Colors.teal[50]!,
+                    iconColor: Colors.teal[700]!,
                     onTap: () {
-                      // 1. Đóng menu hành động tin nhắn hiện tại trước
                       Navigator.pop(context);
-
-                      // 2. Lấy UID của bạn (ví dụ lấy từ widget.currentUid hoặc từ Provider tùy cấu trúc app)
                       final myUid = widget.room.participants.firstWhere(
-                        (id) =>
-                            id !=
-                            widget
-                                .room
-                                .roomName, // Chỉnh lại logic lấy UID của chính bạn tại đây
+                        (id) => id != widget.room.roomName,
                         orElse: () => '',
                       );
 
-                      // 3. Hiển thị BottomSheet chứa widget vừa tách
                       showModalBottomSheet(
                         context: context,
                         isScrollControlled: true,
                         shape: const RoundedRectangleBorder(
                           borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(20),
+                            top: Radius.circular(24),
                           ),
                         ),
                         builder: (context) => ForwardBottomSheet(
-                          originalMessage:
-                              message, // Đối tượng MessageModel của tin nhắn đang chọn
+                          originalMessage: message,
                           currentUid: myUid,
                         ),
                       );
@@ -360,8 +376,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                   if (isMe)
                     _actionButton(
-                      icon: Icons.undo,
-                      label: 'Recall',
+                      icon: Icons.history_rounded,
+                      label: 'Thu hồi',
+                      color: Colors.deepPurple[50]!,
+                      iconColor: Colors.deepPurple[700]!,
                       onTap: () async {
                         Navigator.pop(context);
                         await context.read<ChatProvider>().recallMessage(
@@ -372,13 +390,14 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   if (isMe)
                     _actionButton(
-                      icon: Icons.delete,
-                      label: 'Delete',
+                      icon: Icons.delete_outline_rounded,
+                      label: 'Xóa',
+                      color: Colors.red[50]!,
+                      iconColor: Colors.red[700]!,
                       onTap: () => Navigator.pop(context),
                     ),
                 ],
               ),
-              const SizedBox(height: 20),
             ],
           ),
         );
@@ -398,9 +417,12 @@ class _ChatScreenState extends State<ChatScreen> {
           emoji: emoji,
         );
       },
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Text(emoji, style: const TextStyle(fontSize: 24)),
+      child: Transform.scale(
+        scale: 1.1,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Text(emoji, style: const TextStyle(fontSize: 26)),
+        ),
       ),
     );
   }
@@ -408,26 +430,33 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _actionButton({
     required IconData icon,
     required String label,
+    required Color color,
+    required Color iconColor,
     required VoidCallback onTap,
   }) {
     return InkWell(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(18),
       onTap: onTap,
       child: SizedBox(
-        width: 70,
+        width: 76,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             CircleAvatar(
-              radius: 24,
-              backgroundColor: Colors.grey.shade200,
-              child: Icon(icon, color: Colors.black87),
+              radius: 26,
+              backgroundColor: color,
+              child: Icon(icon, color: iconColor, size: 24),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               label,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[800],
+                letterSpacing: 0.1,
+              ),
             ),
           ],
         ),
@@ -454,10 +483,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  // ===========================================================================
-  // BUILD METHOD CHÍNH
-  // ===========================================================================
-
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
@@ -466,15 +491,15 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: ChatAppBarWidget(
         room: widget.room,
         privateFriend: privateFriend,
-        onSearchPressed: () =>
-            setState(() => _isSearchBarVisible = true), // Mở thanh tìm kiếm
+        onSearchPressed: () => setState(() => _isSearchBarVisible = true),
       ),
       body: Column(
         children: [
-          _buildTopSearchBar(), // ◄ Thanh gõ từ khóa ở đỉnh
+          _buildTopSearchBar(),
           NotFriendWarningWidget(
             room: widget.room,
             privateFriend: privateFriend,
@@ -496,8 +521,8 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
 
           ChatSendingIndicatorWidget(),
-          _buildBottomSearchNavigator(), // ◄ Thanh số lượng X/Y và nút Lên/Xuống
-          // CHỐNG CHẶN CHAT REALTIME
+          _buildBottomSearchNavigator(),
+
           widget.room.isGroup
               ? ChatInputWidget(
                   controller: _messageController,
@@ -517,31 +542,48 @@ class _ChatScreenState extends State<ChatScreen> {
                   builder: (context, snapshot) {
                     final friendData = snapshot.data;
 
-                    // Nếu trường 'blockedBy' trong DB không rỗng chứng tỏ cuộc hội thoại đang bị chặn
                     if (friendData != null && friendData.blockedBy.isNotEmpty) {
                       final bool amITheBlocker =
                           friendData.blockedBy == currentUid;
 
+                      // Nâng cấp Banner chặn cuộc gọi tinh tế, trang nhã hơn
                       return Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        color: Colors.grey.shade50,
-                        alignment: Alignment.center,
-                        child: Text(
-                          amITheBlocker
-                              ? 'You have blocked this user. Unblock to resume chat.'
-                              : 'This user has blocked you. You cannot reply to this conversation.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontStyle: FontStyle.italic,
-                            fontSize: 13,
-                          ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 18,
+                        ),
+                        margin: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red[50],
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.red.shade100),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.block_rounded,
+                              color: Colors.red[400],
+                              size: 22,
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Text(
+                                amITheBlocker
+                                    ? 'Bạn đã chặn người dùng này. Bỏ chặn để tiếp tục trò chuyện.'
+                                    : 'Bạn không thể phản hồi cuộc trò chuyện này lúc này.',
+                                style: TextStyle(
+                                  color: Colors.red[800],
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       );
                     }
 
-                    // Không có ai chặn -> Trả lại quyền gõ phím bình thường
                     return ChatInputWidget(
                       controller: _messageController,
                       replyingMessage: _replyingMessage,
@@ -558,81 +600,97 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // 1. Thanh nhập từ khóa (Nằm ngay dưới AppBar)
   Widget _buildTopSearchBar() {
     if (!_isSearchBarVisible) return const SizedBox.shrink();
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      // Di chuyển color và border vào bên trong BoxDecoration
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+        border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.search, color: Colors.grey),
-          const SizedBox(width: 8),
+          Icon(Icons.search_rounded, color: Colors.teal[600], size: 22),
+          const SizedBox(width: 10),
           Expanded(
-            child: TextField(
-              controller: _searchController,
-              autofocus: true,
-              decoration: const InputDecoration(
-                hintText: 'Search message content...',
-                border: InputBorder.none,
-                isDense: true,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(20),
               ),
-              onChanged: _onSearchChanged,
+              child: TextField(
+                controller: _searchController,
+                autofocus: true,
+                style: const TextStyle(fontSize: 14),
+                decoration: const InputDecoration(
+                  hintText: 'Tìm nội dung tin nhắn...',
+                  border: InputBorder.none,
+                  isDense: true,
+                  hintStyle: TextStyle(color: Colors.grey),
+                ),
+                onChanged: _onSearchChanged,
+              ),
             ),
           ),
+          const SizedBox(width: 6),
           IconButton(
-            icon: const Icon(Icons.close, color: Colors.grey),
+            icon: const Icon(Icons.close_rounded, color: Colors.grey, size: 22),
             onPressed: _closeSearchMode,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
           ),
         ],
       ),
     );
   }
 
-  // 2. Thanh hiển thị số lượng và nút bấm điều hướng (Nằm trên thanh Chat Input)
   Widget _buildBottomSearchNavigator() {
     if (!_isSearchBarVisible || _searchResults.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    // Hiển thị dạng thân thiện con người (Ví dụ: kết quả thứ 1/3 thay vì chỉ số mảng 0/3)
     final int displayCurrent = _currentSearchIndex + 1;
     final int displayTotal = _searchResults.length;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      // Đã sửa: Gom color và border vào đúng vị trí trong BoxDecoration
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        border: Border(top: BorderSide(color: Colors.grey.shade300)),
+        color: Colors.teal[50]!.withOpacity(0.6),
+        border: Border(top: BorderSide(color: Colors.teal.shade100)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            'Found matches: $displayCurrent/$displayTotal',
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
+            'Đã tìm thấy: $displayCurrent / $displayTotal',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.teal[800],
               fontSize: 13,
             ),
           ),
           Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.keyboard_arrow_up),
-                tooltip: 'Older message',
-                onPressed: () => _navigateSearch(true), // Đi lên trên
+                icon: const Icon(Icons.keyboard_arrow_up_rounded),
+                color: Colors.teal[700],
+                tooltip: 'Tin nhắn cũ hơn',
+                onPressed: () => _navigateSearch(true),
               ),
               IconButton(
-                icon: const Icon(Icons.keyboard_arrow_down),
-                tooltip: 'Newer message',
-                onPressed: () => _navigateSearch(false), // Đi xuống dưới
+                icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                color: Colors.teal[700],
+                tooltip: 'Tin nhắn mới hơn',
+                onPressed: () => _navigateSearch(false),
               ),
             ],
           ),

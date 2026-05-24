@@ -23,7 +23,9 @@ class UserModel {
       avatarUrl: map['avatarUrl'] ?? '',
       isOnline: map['isOnline'] ?? false,
       lastSeen: map['lastSeen'] != null
-          ? DateTime.tryParse(map['lastSeen'])
+          ? (map['lastSeen'] is int
+                ? DateTime.fromMillisecondsSinceEpoch(map['lastSeen'])
+                : DateTime.tryParse(map['lastSeen']))
           : null,
     );
   }
