@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import '../services/user_service.dart';
 import '../models/user_model.dart';
@@ -22,6 +24,18 @@ class UserProvider extends ChangeNotifier {
     _preloadUser(uid);
 
     return 'Loading...'; // Trả về text tạm thời, không làm treo UI
+  }
+
+  String? getAvatarUrlFromCache(String uid) {
+    if (_cache.containsKey(uid)) {
+      return _cache[uid]!
+          .avatarUrl; // Trả về URL ảnh (có thể là String rỗng hoặc null tùy Model)
+    }
+
+    // Nếu chưa có dữ liệu trong cache, gọi tải ngầm tương tự như lấy tên
+    _preloadUser(uid);
+
+    return null; // Trả về null để UI biết đường hiển thị chữ cái đại diện hoặc ảnh mặc định ban đầu
   }
 
   // Hàm chạy ngầm tải dữ liệu từ server và nạp vào cache
@@ -58,50 +72,47 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  // Hàm cũ giữ nguyên để không lỗi các nơi khác đang await nó
-  Future<String> getDisplayName(String uid) async {
-    if (_cache.containsKey(uid)) {
-      return _cache[uid]!.displayName;
-    }
-
-    try {
-      final user = await fetchUserById(uid);
-      return user?.displayName ?? 'Unknown';
-    } catch (e) {
-      debugPrint('[UserProvider] getDisplayName error: $e');
-      return 'Unknown';
-    }
-  }
-
-  Future<bool> updateProfile({
+  Future<bool> uploadAndUpdateProfile({
     required String uid,
     required String displayName,
-    required String avatarUrl,
+    Uint8List? imageBytes,
+    String? fileName,
+    required String currentAvatarUrl,
     VoidCallback? onSuccess,
   }) async {
     if (displayName.trim().isEmpty) return false;
 
     try {
       _isLoading = true;
-      notifyListeners();
+      notifyListeners(); // Bật xoay vòng loading trên UI
 
-      await _userService.updateProfile(
+      // 1. Giao phó toàn bộ nghiệp vụ xử lý ảnh & DB cho UserService lo liệu
+      final finalAvatarUrl = await _userService.updateProfile(
         uid: uid,
-        displayName: displayName.trim(),
-        avatarUrl: avatarUrl.trim(),
+        displayName: displayName,
+        imageBytes: imageBytes,
+        fileName: fileName,
+        currentAvatarUrl: currentAvatarUrl,
       );
 
-      if (onSuccess != null) {
-        onSuccess();
+      // 2. Đồng bộ bộ nhớ Cache Local ngay lập tức với URL trả về từ Service
+      if (_cache.containsKey(uid)) {
+        _cache[uid] = _cache[uid]!.copyWith(
+          displayName: displayName.trim(),
+          avatarUrl: finalAvatarUrl,
+        );
       }
+
+      // 3. Chạy callback thành công (ví dụ: lệnh refresh từ AuthProvider ngoài UI)
+      if (onSuccess != null) onSuccess();
 
       return true;
     } catch (e) {
-      debugPrint('[UserProvider] Lỗi cập nhật profile: $e');
+      debugPrint('[UserProvider] Lỗi uploadAndUpdateProfile: $e');
       return false;
     } finally {
       _isLoading = false;
-      notifyListeners();
+      notifyListeners(); // Tắt loading trên UI
     }
   }
 }

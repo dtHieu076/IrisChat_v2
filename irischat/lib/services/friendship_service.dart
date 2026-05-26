@@ -400,4 +400,21 @@ class FriendshipService {
 
     return controller.stream;
   }
+
+  // ===========================================================================
+  // CREATE 1-1 CHAT ROOM
+  // ===========================================================================
+  Future<void> create1to1ChatRoom({required ChatRoomModel room}) async {
+    try {
+      // Lưu phòng chat vào node 'chat_rooms' với key là roomId
+      await _db.child('chat_rooms').child(room.roomId).set(room.toMap());
+
+      print(
+        '[FriendshipService] Tạo phòng chat 1-1 thành công: ${room.roomId}',
+      );
+    } catch (e) {
+      print('[FriendshipService] Lỗi create1to1ChatRoom: $e');
+      rethrow;
+    }
+  }
 }

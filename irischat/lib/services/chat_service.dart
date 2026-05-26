@@ -223,4 +223,20 @@ class ChatService {
     // Thực hiện cập nhật bất đồng bộ đồng thời lên Firebase
     await _db.update(updates);
   }
+
+  // ===========================================================================
+  // TẠO ROOM NẾU CHƯA TỒN TẠI
+  // ===========================================================================
+
+  Future<void> createChatRoomIfNotExists(ChatRoomModel room) async {
+    final roomRef = _db.child('chat_rooms').child(room.roomId);
+
+    final snapshot = await roomRef.get();
+
+    // Nếu đã tồn tại thì thôi
+    if (snapshot.exists) return;
+
+    // Tạo mới
+    await roomRef.set(room.toMap());
+  }
 }

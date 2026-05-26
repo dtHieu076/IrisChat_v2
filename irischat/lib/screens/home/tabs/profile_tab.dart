@@ -1,4 +1,6 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../../providers/auth_provider.dart';
@@ -16,9 +18,11 @@ class ProfileTab extends StatefulWidget {
 class _ProfileTabState extends State<ProfileTab> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _avatarController = TextEditingController();
 
-  // Biến cờ hiệu để đảm bảo chỉ đổ dữ liệu gốc vào Controller ĐÚNG 1 LẦN DUY NHẤT
+  // Biến lưu trữ dữ liệu ảnh mới chọn
+  Uint8List? _selectedImageBytes;
+  String? _selectedFileName;
+
   bool _isDataInitialized = false;
 
   @override
@@ -27,30 +31,47 @@ class _ProfileTabState extends State<ProfileTab> {
     _initUserData();
   }
 
-  // Hàm hỗ trợ khởi tạo dữ liệu an toàn
   void _initUserData() {
     final currentUser = widget.authProvider.user;
     if (currentUser != null && !_isDataInitialized) {
       _nameController.text = currentUser.displayName;
-      _avatarController.text = currentUser.avatarUrl;
       _isDataInitialized = true;
     }
   }
 
-  @override
-  void didUpdateWidget(covariant ProfileTab oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Nếu AuthProvider ở widget cha cập nhật (ví dụ từ null -> có dữ liệu), nạp lại data
-    _initUserData();
+  // ===========================================================================
+  // HÀM CHỌN ẢNH BẰNG FILE_PICKER VỚI BYTES (GIỮ NGUYÊN LOGIC)
+  // ===========================================================================
+  Future<void> _pickImage() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image, // Chỉ lọc các file hình ảnh
+        withData: true, // BẮT BUỘC: Đọc dữ liệu dạng bytes
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+
+        setState(() {
+          _selectedImageBytes = file.bytes;
+          _selectedFileName =
+              '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
+        });
+      }
+    } catch (e) {
+      debugPrint('Lỗi chọn ảnh qua FilePicker: $e');
+    }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _avatarController.dispose();
     super.dispose();
   }
 
+  // ===========================================================================
+  // HÀM LƯU THÔNG TIN (GIỮ NGUYÊN LOGIC)
+  // ===========================================================================
   void _saveProfile() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -59,20 +80,35 @@ class _ProfileTabState extends State<ProfileTab> {
 
     final userProvider = context.read<UserProvider>();
 
-    final success = await userProvider.updateProfile(
+    final success = await userProvider.uploadAndUpdateProfile(
       uid: currentUser.uid,
       displayName: _nameController.text,
-      avatarUrl: _avatarController.text,
+      imageBytes: _selectedImageBytes,
+      fileName: _selectedFileName,
+      currentAvatarUrl: currentUser.avatarUrl,
       onSuccess: () async {
         await widget.authProvider.refreshCurrentUser(currentUser.uid);
+        // Xóa bộ nhớ đệm ảnh tạm thời sau khi upload xong
+        setState(() {
+          _selectedImageBytes = null;
+          _selectedFileName = null;
+        });
       },
     );
 
     if (mounted && success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cập nhật tài khoản thành công!'),
-          backgroundColor: Colors.green,
+        SnackBar(
+          content: const Text(
+            'Cập nhật tài khoản thành công!',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: Colors.teal.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.all(16),
         ),
       );
     }
@@ -80,175 +116,243 @@ class _ProfileTabState extends State<ProfileTab> {
 
   @override
   Widget build(BuildContext context) {
-    // Watch để nhận thông tin thay đổi từ các Provider
     final currentUser = context.watch<AuthProvider>().user;
     final userProvider = context.watch<UserProvider>();
 
-    // CHẶN LỖI NULL: Nếu Firebase chưa trả data về, hiện vòng xoay, không cố gán lung tung
     if (currentUser == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // Đảm bảo nếu data vừa từ null chuyển sang có dữ liệu, Controller sẽ có data lập tức
-    if (!_isDataInitialized) {
-      _initUserData();
-    }
+    if (!_isDataInitialized) _initUserData();
 
     return Scaffold(
+      backgroundColor: Colors.grey.shade50, // Nền app sáng, tạo độ sâu
       appBar: AppBar(
-        title: const Text(
-          'Tài khoản',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: Text(
+          'Tài Khoản',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            color: Colors.blueGrey.shade900,
+          ),
         ),
         centerTitle: true,
         elevation: 0,
         backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black,
+        surfaceTintColor: Colors.transparent,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Form(
-          key: _formKey,
+        physics: const BouncingScrollPhysics(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
           child: Column(
             children: [
-              // 1. Hình ảnh Avatar hiển thị dựa theo dữ liệu realtime từ controller
-              Center(
-                child: Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundColor: Colors.blue.shade100,
-                      backgroundImage: _avatarController.text.isNotEmpty
-                          ? NetworkImage(_avatarController.text)
-                          : null,
-                      child: _avatarController.text.isEmpty
-                          ? Text(
-                              _nameController.text.isNotEmpty
-                                  ? _nameController.text[0].toUpperCase()
-                                  : 'U',
-                              style: const TextStyle(
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue,
-                              ),
-                            )
-                          : null,
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: CircleAvatar(
-                        radius: 18,
-                        backgroundColor: Colors.blue,
-                        child: const Icon(
-                          Icons.camera_alt,
-                          size: 14,
-                          color: Colors.white,
+              // CỤM AVATAR VÀ EMAIL
+              GestureDetector(
+                onTap: userProvider.isLoading ? null : _pickImage,
+                child: Center(
+                  child: Stack(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 4),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 15,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: CircleAvatar(
+                          radius: 60,
+                          backgroundColor: Colors.teal.shade50,
+                          backgroundImage: _selectedImageBytes != null
+                              ? MemoryImage(_selectedImageBytes!)
+                                    as ImageProvider
+                              : (currentUser.avatarUrl.isNotEmpty
+                                    ? NetworkImage(currentUser.avatarUrl)
+                                    : null),
+                          child:
+                              _selectedImageBytes == null &&
+                                  currentUser.avatarUrl.isEmpty
+                              ? Text(
+                                  _nameController.text.isNotEmpty
+                                      ? _nameController.text[0].toUpperCase()
+                                      : 'U',
+                                  style: TextStyle(
+                                    fontSize: 40,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.teal.shade700,
+                                  ),
+                                )
+                              : null,
                         ),
                       ),
+                      Positioned(
+                        bottom: 0,
+                        right: 4,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.teal.shade600,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 3),
+                          ),
+                          child: const Icon(
+                            Icons.camera_alt_rounded,
+                            size: 18,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                currentUser.email,
+                style: TextStyle(
+                  color: Colors.blueGrey.shade400,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // KHỐI FORM NHẬP LIỆU & NÚT LƯU
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                currentUser.email,
-                style: const TextStyle(color: Colors.grey, fontSize: 14),
-              ),
-              const SizedBox(height: 32),
-
-              // 2. Ô nhập tên hiển thị
-              TextFormField(
-                controller: _nameController,
-                decoration: InputDecoration(
-                  labelText: 'Tên hiển thị',
-                  prefixIcon: const Icon(Icons.person_outline),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onChanged: (val) => setState(
-                  () {},
-                ), // Giữ lại để cập nhật chữ cái trên Avatar preview
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Tên hiển thị không được để trống';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // 3. Ô nhập Link Avatar
-              TextFormField(
-                controller: _avatarController,
-                decoration: InputDecoration(
-                  labelText: 'Đường dẫn ảnh đại diện (URL)',
-                  prefixIcon: const Icon(Icons.link_outlined),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onChanged: (val) => setState(
-                  () {},
-                ), // Giữ lại để cập nhật ảnh trên Avatar preview
-              ),
-              const SizedBox(height: 32),
-
-              // 4. Nút bấm lưu
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: userProvider.isLoading ? null : _saveProfile,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: userProvider.isLoading
-                      ? const SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    children: [
+                      TextFormField(
+                        controller: _nameController,
+                        style: TextStyle(
+                          color: Colors.blueGrey.shade900,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: 'Tên hiển thị',
+                          labelStyle: TextStyle(
+                            color: Colors.blueGrey.shade400,
                           ),
-                        )
-                      : const Text(
-                          'Lưu thay đổi',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                          prefixIcon: Icon(
+                            Icons.person_rounded,
+                            color: Colors.teal.shade500,
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey.shade50,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 16,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                              color: Colors.teal.shade300,
+                              width: 1.5,
+                            ),
                           ),
                         ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Tên hiển thị không được để trống';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 54,
+                        child: ElevatedButton(
+                          onPressed: userProvider.isLoading
+                              ? null
+                              : _saveProfile,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.teal.shade600,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            disabledBackgroundColor: Colors.teal.shade200,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: userProvider.isLoading
+                              ? const SizedBox(
+                                  height: 24,
+                                  width: 24,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2.5,
+                                  ),
+                                )
+                              : const Text(
+                                  'Lưu Thay Đổi',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
 
+              const SizedBox(height: 32),
+
+              // NÚT ĐĂNG XUẤT (TONAL STYLE)
+              SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: TextButton.icon(
+                  onPressed: () {
+                    widget.authProvider.logout();
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      '/login',
+                      (route) => false,
+                    );
+                  },
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.red.withValues(alpha: 0.1),
+                    foregroundColor: Colors.red.shade600,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  icon: const Icon(Icons.logout_rounded, size: 22),
+                  label: const Text(
+                    'Đăng Xuất Tài Khoản',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
               const SizedBox(height: 24),
-              const Divider(),
-              const SizedBox(height: 16),
-
-              // 5. Nút Đăng xuất
-              TextButton.icon(
-                onPressed: () {
-                  widget.authProvider.logout();
-
-                  Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    '/login',
-                    (route) => false,
-                  );
-                },
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
-                icon: const Icon(Icons.logout),
-                label: const Text(
-                  'Đăng xuất tài khoản',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
             ],
           ),
         ),

@@ -1,12 +1,17 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
+import 'package:irischat/services/user_service.dart';
 
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
+  final UserService _userService = UserService();
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
 
   User? _user;
@@ -23,17 +28,34 @@ class AuthProvider extends ChangeNotifier {
     _listenAuthState();
   }
 
+  StreamSubscription<DatabaseEvent>? _currentUserSubscription;
+
   void _listenAuthState() {
     _authService.authStateChanges.listen((firebaseUser) async {
       _user = firebaseUser;
+      // Hủy listener cũ
+      await _currentUserSubscription?.cancel();
 
       if (firebaseUser == null) {
         _userModel = null;
         notifyListeners();
       } else {
-        // Mỗi khi trạng thái Auth thay đổi (Login/Register thành công)
-        // Lập tức kéo dữ liệu Profile từ database về gán vào State
-        await refreshCurrentUser(firebaseUser.uid);
+        // Set online presence
+        _userService.setUserPresence(firebaseUser.uid);
+
+        // Lắng nghe realtime user hiện tại
+        _currentUserSubscription = _db
+            .child('users/${firebaseUser.uid}')
+            .onValue
+            .listen((event) {
+              if (event.snapshot.exists) {
+                final map = Map<String, dynamic>.from(
+                  event.snapshot.value as Map,
+                );
+                _userModel = UserModel.fromMap(map);
+                notifyListeners();
+              }
+            });
       }
     });
   }
@@ -71,11 +93,23 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> register({
     required String email,
     required String password,
+    required String displayName,
+    Uint8List? imageBytes,
+    String? fileName,
   }) async {
     try {
       _setLoading(true);
       _error = null;
-      await _authService.register(email: email, password: password);
+
+      // Chuyển tiếp toàn bộ data (bao gồm cả bytes ảnh) xuống AuthService xử lý xuôi dòng
+      await _authService.register(
+        email: email,
+        password: password,
+        displayName: displayName,
+        imageBytes: imageBytes,
+        fileName: fileName,
+      );
+
       return true;
     } on FirebaseAuthException catch (e) {
       _error = e.message;
@@ -89,6 +123,16 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    try {
+      // Nếu user đang đăng nhập, chuyển họ sang Offline trên DB trước khi ngắt session
+      if (_user != null) {
+        await _userService.setOfflineManually(_user!.uid);
+      }
+    } catch (e) {
+      debugPrint('[AuthProvider] Lỗi set offline khi logout: $e');
+    }
+
+    // Tiến hành đăng xuất khỏi Firebase Auth
     await _authService.logout();
   }
 

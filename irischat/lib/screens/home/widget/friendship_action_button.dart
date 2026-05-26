@@ -60,7 +60,14 @@ class FriendshipActionButton extends StatelessWidget {
           final req = provider.receivedRequests.firstWhere(
             (r) => r.senderId == targetUser.uid,
           );
-          provider.acceptRequest(req);
+
+          // Đã cập nhật để truyền đủ tham số tạo phòng chat 1-1
+          provider.acceptRequest(
+            request: req,
+            currentUid: currentUser.uid,
+            friendName: targetUser.displayName,
+            friendAvatar: targetUser.avatarUrl,
+          );
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.green,
