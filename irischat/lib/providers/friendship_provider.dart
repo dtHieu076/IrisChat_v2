@@ -1,14 +1,18 @@
+import 'dart:async'; // 1. THÊM IMPORT NÀY ĐỂ QUẢN LÝ STREAM
 import 'package:flutter/material.dart';
 import 'package:irischat/models/chat_room_model.dart';
-import 'package:irischat/models/friend_model.dart';
-
+import '../models/friend_model.dart';
 import '../models/friendship_model.dart';
 import '../models/user_model.dart';
-
 import '../services/friendship_service.dart';
 
 class FriendshipProvider extends ChangeNotifier {
   final FriendshipService _service = FriendshipService();
+
+  // Khai báo các Subscription để hủy khi không dùng, tránh trùng lặp Listener
+  StreamSubscription? _receivedSub;
+  StreamSubscription? _sentSub;
+  StreamSubscription? _friendsSub;
 
   // =========================
   // FRIENDS LIST
@@ -43,11 +47,10 @@ class FriendshipProvider extends ChangeNotifier {
     required String currentUid,
   }) async {
     _isSearching = true;
-    _searchedUser = null; // Reset kết quả cũ
+    _searchedUser = null;
     notifyListeners();
 
     try {
-      // Vì hàm _service.searchUsersByEmail của bạn trả về List, ta lấy phần tử đầu tiên
       final results = await _service.searchUsersByEmail(
         keyword: keyword,
         currentUid: currentUid,
@@ -69,105 +72,63 @@ class FriendshipProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // SỬA HÀM NÀY: Xóa bỏ việc add thủ công, xóa luôn hàm sendRequest bị trùng lặp phía dưới
   Future<void> sendFriendRequest({
     required String senderId,
     required String senderEmail,
-    required String receiverId, // Sửa từ receiverEmail thành receiverId
+    required String receiverId,
   }) async {
     try {
-      // Không cần check _searchedUser nữa vì ta đã có thẳng receiverId từ UI truyền vào
-      final request = await _service.sendFriendRequest(
+      await _service.sendFriendRequest(
         senderId: senderId,
         senderEmail: senderEmail,
         receiverId: receiverId,
       );
 
-      _sentRequests.add(request);
-      notifyListeners();
-
-      print('[FriendshipProvider] request added local state');
+      // Khung tìm kiếm nên ẩn đi sau khi gửi thành công cho đẹp giao diện
+      clearSearch();
+      print('[FriendshipProvider] Gửi lời mời thành công, chờ Stream tự cập nhật');
     } catch (e) {
       print('[FriendshipProvider] send request error: $e');
       rethrow;
     }
   }
 
-  // x ----------SEND REQUEST
-  Future<void> sendRequest({
-    required String senderId,
-
-    required String senderEmail,
-
-    required String receiverId,
-  }) async {
-    try {
-      final request = await _service.sendFriendRequest(
-        senderId: senderId,
-        senderEmail: senderEmail,
-        receiverId: receiverId,
-      );
-
-      _sentRequests.add(request);
-
-      notifyListeners();
-
-      print(
-        '[FriendshipProvider] '
-        'request added local state',
-      );
-    } catch (e) {
-      print(
-        '[FriendshipProvider] '
-        'send request error: $e',
-      );
-    }
-  }
-
   // LISTEN RECEIVED REQUESTS
   void listenReceivedRequests(String currentUid) {
-    _service.listenReceivedRequests(currentUid).listen((requests) {
+    _receivedSub?.cancel(); // Hủy cái cũ nếu có trước khi lắng nghe cái mới
+    _receivedSub = _service.listenReceivedRequests(currentUid).listen((requests) {
       _receivedRequests = requests;
-
       notifyListeners();
-
-      print(
-        '[FriendshipProvider] '
-        'received requests: '
-        '${requests.length}',
-      );
+      print('[FriendshipProvider] received requests: ${requests.length}');
     });
   }
 
   // LISTEN SENT REQUESTS
   void listenSentRequests(String currentUid) {
-    _service.listenSentRequests(currentUid).listen((requests) {
-      _sentRequests = requests; // Cập nhật danh sách lời mời đã gửi realtime
-      notifyListeners(); // Báo cho UI vẽ lại trạng thái các nút bấm
-
+    _sentSub?.cancel(); // Hủy cái cũ nếu có trước khi lắng nghe cái mới
+    _sentSub = _service.listenSentRequests(currentUid).listen((requests) {
+      _sentRequests = requests; // Stream tự nạp từ Firebase về đầy đủ
+      notifyListeners();        // Vẽ lại UI chuẩn chỉnh không lo trùng lặp
       print('[FriendshipProvider] sent requests updated: ${requests.length}');
     });
   }
 
-  // Thêm vào class FriendshipProvider
-  // Thêm vào class FriendshipProvider
+  // ACCEPT REQUEST
   Future<void> acceptRequest({
     required FriendshipModel request,
     required String currentUid,
-    required String friendName, // Tên của người vừa được chấp nhận kết bạn
-    required String friendAvatar, // Avatar của người vừa được chấp nhận kết bạn
+    required String friendName,
+    required String friendAvatar,
   }) async {
     try {
-      // 1. Cập nhật trạng thái lời mời thành "accepted" trên Firebase
       await _service.acceptFriendRequest(request: request);
       print('[FriendshipProvider] Chấp nhận kết bạn thành công');
 
-      // 2. Xác định friendUid (từ senderId hoặc receiverId tùy thuộc vào ai gửi)
-      // Thường khi mình accept, mình là receiver, người kia là sender.
       final friendUid = (request.senderId == currentUid)
           ? request.receiverId
           : request.senderId;
 
-      // 3. Khởi tạo Room 1-1 rỗng
       final room = ChatRoomModel.create1to1(
         currentUid: currentUid,
         friendUid: friendUid,
@@ -175,8 +136,6 @@ class FriendshipProvider extends ChangeNotifier {
         friendAvatar: friendAvatar,
       );
 
-      // 4. Lưu Room lên Firebase
-      // Giả sử bạn có hàm create1to1ChatRoom (hoặc dùng chung hàm lưu room)
       await _service.create1to1ChatRoom(room: room);
       print('[FriendshipProvider] Khởi tạo phòng chat 1-1 thành công');
     } catch (e) {
@@ -205,11 +164,12 @@ class FriendshipProvider extends ChangeNotifier {
     }
   }
 
-  // Lắng nghe danh sách bạn bè từ Service
+  // LISTEN FRIENDS
   void listenFriends(String currentUid) {
-    _service.listenFriendsList(currentUid).listen((friends) {
+    _friendsSub?.cancel(); // Hủy cái cũ trước khi lắng nghe cái mới
+    _friendsSub = _service.listenFriendsList(currentUid).listen((friends) {
       _friendsList = friends;
-      notifyListeners(); // Thông báo cho UI vẽ lại giao diện
+      notifyListeners();
     });
   }
 
@@ -242,8 +202,6 @@ class FriendshipProvider extends ChangeNotifier {
     try {
       await _service.deleteFriend(currentUid: currentUid, friendUid: friendUid);
       print('[FriendshipProvider] Xóa bạn thành công');
-      // Lưu ý: Không cần gọi notifyListeners() hay xóa thủ công khỏi _friendsList
-      // vì hàm listenFriends() dùng Stream sẽ tự động nhận diện thay đổi từ Firebase và cập nhật lại list!
     } catch (e) {
       print('[FriendshipProvider] Lỗi removeFriend: $e');
     }
@@ -260,14 +218,21 @@ class FriendshipProvider extends ChangeNotifier {
         friendUid: friendUid,
         shouldBlock: shouldBlock,
       );
-      // Thông thường Firebase Realtime Stream sẽ tự cập nhật UI, không cần notifyListeners() thủ công ở đây
     } catch (e) {
       debugPrint("[FriendshipProvider] Error toggleBlock: $e");
     }
   }
 
-  // 2. Phương thức lắng nghe trạng thái dữ liệu Block Realtime phục vụ ẩn/hiện Chat Input
   Stream<FriendModel?> listenFriendshipState(String uid1, String uid2) {
     return _service.listenFriendship(uid1, uid2);
+  }
+
+  // ĐỪNG QUÊN GIẢI PHÓNG BỘ NHỚ KHI PROVIDER BỊ HUỶ
+  @override
+  void dispose() {
+    _receivedSub?.cancel();
+    _sentSub?.cancel();
+    _friendsSub?.cancel();
+    super.dispose();
   }
 }

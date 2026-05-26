@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -27,28 +28,11 @@ class AuthProvider extends ChangeNotifier {
     _listenAuthState();
   }
 
-  // void _listenAuthState() {
-  //   _authService.authStateChanges.listen((firebaseUser) async {
-  //     _user = firebaseUser;
-
-  //     if (firebaseUser == null) {
-  //       _userModel = null;
-  //       notifyListeners();
-  //     } else {
-  //       // Đồng thời thiết lập trạng thái Online cho người dùng
-  //       _userService.setUserPresence(firebaseUser.uid);
-  //       //------------------ nên bổ sung thêm lắng nghe realtime
-  //       // Lập tức kéo dữ liệu Profile từ database về gán vào State
-  //       await refreshCurrentUser(firebaseUser.uid);
-  //     }
-  //   });
-  // }
   StreamSubscription<DatabaseEvent>? _currentUserSubscription;
 
   void _listenAuthState() {
     _authService.authStateChanges.listen((firebaseUser) async {
       _user = firebaseUser;
-
       // Hủy listener cũ
       await _currentUserSubscription?.cancel();
 
@@ -68,9 +52,7 @@ class AuthProvider extends ChangeNotifier {
                 final map = Map<String, dynamic>.from(
                   event.snapshot.value as Map,
                 );
-
                 _userModel = UserModel.fromMap(map);
-
                 notifyListeners();
               }
             });
@@ -111,11 +93,23 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> register({
     required String email,
     required String password,
+    required String displayName,
+    Uint8List? imageBytes,
+    String? fileName,
   }) async {
     try {
       _setLoading(true);
       _error = null;
-      await _authService.register(email: email, password: password);
+
+      // Chuyển tiếp toàn bộ data (bao gồm cả bytes ảnh) xuống AuthService xử lý xuôi dòng
+      await _authService.register(
+        email: email,
+        password: password,
+        displayName: displayName,
+        imageBytes: imageBytes,
+        fileName: fileName,
+      );
+
       return true;
     } on FirebaseAuthException catch (e) {
       _error = e.message;

@@ -347,10 +347,7 @@ class _FriendsTabState extends State<FriendsTab> {
   // ===========================================================================
   // TAB LỜI MỜI KẾT BẠN (NHẬN)
   // ===========================================================================
-  Widget _buildReceivedTab(
-    FriendshipProvider provider,
-    UserProvider uProvider,
-  ) {
+  Widget _buildReceivedTab(FriendshipProvider provider, UserProvider uProvider) {
     if (provider.receivedRequests.isEmpty) {
       return _buildEmptyState(
         Icons.inbox_rounded,
@@ -726,7 +723,7 @@ class _FriendsTabState extends State<FriendsTab> {
   Widget _buildTonalButton({
     required IconData icon,
     required Color color,
-    required VoidCallback onTap,
+    required VoidCallback onTap
   }) {
     return InkWell(
       onTap: onTap,
